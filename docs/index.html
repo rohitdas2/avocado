@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avocado — Smart Nutrition Tracking</title>
+    <meta name="description" content="Avocado is a premium iOS nutrition tracker with adaptive maintenance calories, micronutrient deficiency tracking, barcode scanning, and Apple Health integration.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #050e09;
+            --surface: #0d1f15;
+            --surface-light: #1a3a2b;
+            --accent: #b5d93b;
+            --accent-dim: rgba(181, 217, 59, 0.15);
+            --protein: #ff7d7d;
+            --carbs: #f4b942;
+            --fat: #e8d5a3;
+            --text: #e8ede9;
+            --text-dim: #7a9485;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Ambient Glow */
+        .ambient-glow {
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(150px);
+            opacity: 0.12;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .glow-1 { background: var(--accent); top: -200px; left: -100px; }
+        .glow-2 { background: #4ecdc4; bottom: -200px; right: -100px; }
+        .glow-3 { background: var(--accent); top: 50%; left: 50%; transform: translate(-50%,-50%); opacity: 0.06; width: 900px; height: 900px; }
+
+        /* Nav */
+        nav {
+            position: fixed; top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 16px 40px;
+            display: flex; align-items: center; justify-content: space-between;
+            backdrop-filter: blur(20px);
+            background: rgba(5, 14, 9, 0.7);
+            border-bottom: 1px solid rgba(181, 217, 59, 0.08);
+        }
+        .nav-logo {
+            display: flex; align-items: center; gap: 10px;
+            font-weight: 800; font-size: 1.3rem;
+            text-decoration: none; color: var(--text);
+        }
+        .nav-logo span { font-size: 1.6rem; }
+        .nav-links { display: flex; gap: 32px; list-style: none; }
+        .nav-links a {
+            text-decoration: none; color: var(--text-dim);
+            font-weight: 500; font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+        .nav-links a:hover { color: var(--accent); }
+
+        /* Sections */
+        section { position: relative; z-index: 1; }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 120px 40px 80px;
+            gap: 80px;
+        }
+        .hero-text { max-width: 560px; }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(181, 217, 59, 0.2);
+            border-radius: 100px;
+            padding: 6px 16px;
+            font-size: 0.8rem; font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 24px;
+        }
+        .hero-badge::before { content: '🥑'; }
+        .hero h1 {
+            font-size: clamp(2.8rem, 5vw, 4.2rem);
+            font-weight: 900;
+            line-height: 1.08;
+            letter-spacing: -0.03em;
+            margin-bottom: 20px;
+        }
+        .hero h1 .gradient-text {
+            background: linear-gradient(135deg, var(--accent), #7cb342);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+            margin-bottom: 36px;
+            max-width: 480px;
+        }
+        .hero-cta {
+            display: flex; gap: 16px; align-items: center;
+        }
+        .btn-primary {
+            display: inline-flex; align-items: center; gap: 10px;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 700; font-size: 1rem;
+            padding: 14px 32px;
+            border-radius: 14px;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.3s;
+            border: none; cursor: pointer;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(181, 217, 59, 0.3);
+        }
+        .btn-secondary {
+            display: inline-flex; align-items: center; gap: 10px;
+            background: transparent;
+            color: var(--text);
+            font-weight: 600; font-size: 1rem;
+            padding: 14px 28px;
+            border-radius: 14px;
+            text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.12);
+            transition: border-color 0.3s, background 0.3s;
+        }
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+        .hero-image {
+            flex-shrink: 0;
+            animation: float 6s ease-in-out infinite;
+        }
+        .hero-image img {
+            width: 360px;
+            height: auto;
+            border-radius: 28px;
+            filter: drop-shadow(0 30px 60px rgba(0,0,0,0.5));
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-16px); }
+        }
+
+        /* Features Grid */
+        .features {
+            padding: 100px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section-label {
+            font-size: 0.8rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.15em;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+        .section-title {
+            font-size: clamp(2rem, 3.5vw, 2.8rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-dim);
+            max-width: 560px;
+            margin-bottom: 56px;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 20px;
+            padding: 36px 32px;
+            transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(181, 217, 59, 0.15);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+        }
+        .feature-icon {
+            width: 52px; height: 52px;
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+        }
+        .feature-card h3 {
+            font-size: 1.15rem; font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .feature-card p {
+            font-size: 0.92rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        /* Insights Section */
+        .insights-section {
+            padding: 100px 40px;
+            display: flex; align-items: center; justify-content: center;
+            gap: 80px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .insights-section.reverse { flex-direction: row-reverse; }
+        .insights-image img {
+            width: 340px;
+            height: auto;
+            border-radius: 24px;
+            filter: drop-shadow(0 20px 50px rgba(0,0,0,0.4));
+        }
+        .insights-text { max-width: 480px; }
+        .insights-text .section-label { margin-bottom: 12px; }
+        .insights-text h2 {
+            font-size: 2.2rem; font-weight: 800;
+            margin-bottom: 16px; letter-spacing: -0.02em;
+        }
+        .insights-text p {
+            color: var(--text-dim); font-size: 1.05rem;
+            line-height: 1.7; margin-bottom: 24px;
+        }
+        .insight-pills {
+            display: flex; flex-wrap: wrap; gap: 10px;
+        }
+        .insight-pill {
+            padding: 8px 18px;
+            border-radius: 100px;
+            font-size: 0.82rem; font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: var(--surface);
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            padding: 60px 40px;
+            display: flex; justify-content: center; gap: 80px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat { text-align: center; }
+        .stat-value {
+            font-size: 2.6rem; font-weight: 900;
+            background: linear-gradient(135deg, var(--accent), #7cb342);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-label {
+            font-size: 0.85rem; color: var(--text-dim);
+            font-weight: 500; margin-top: 4px;
+        }
+
+        /* CTA */
+        .cta-section {
+            padding: 120px 40px;
+            text-align: center;
+        }
+        .cta-section h2 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 900; margin-bottom: 16px;
+            letter-spacing: -0.03em;
+        }
+        .cta-section p {
+            color: var(--text-dim); font-size: 1.1rem;
+            max-width: 500px; margin: 0 auto 36px;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px;
+            text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+        footer a { color: var(--accent); text-decoration: none; }
+
+        /* Scroll Animations */
+        .reveal {
+            opacity: 0; transform: translateY(30px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .hero { flex-direction: column; text-align: center; padding: 120px 24px 60px; gap: 40px; }
+            .hero p { margin-left: auto; margin-right: auto; }
+            .hero-cta { justify-content: center; flex-wrap: wrap; }
+            .hero-image img { width: 280px; }
+            .features { padding: 60px 24px; }
+            .features-grid { grid-template-columns: 1fr; }
+            .insights-section, .insights-section.reverse { flex-direction: column; text-align: center; padding: 60px 24px; gap: 40px; }
+            .insights-image img { width: 260px; }
+            .stats-bar { flex-wrap: wrap; gap: 40px; padding: 40px 24px; }
+            nav { padding: 12px 20px; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="ambient-glow glow-1"></div>
+<div class="ambient-glow glow-2"></div>
+<div class="ambient-glow glow-3"></div>
+
+<nav>
+    <a href="#" class="nav-logo"><span>🥑</span> Avocado</a>
+    <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#insights">Insights</a></li>
+        <li><a href="#micros">Micronutrients</a></li>
+        <li><a href="https://github.com/rohitdas2/avocado" target="_blank">GitHub</a></li>
+    </ul>
+</nav>
+
+<section class="hero">
+    <div class="hero-text">
+        <div class="hero-badge">Open Source Nutrition Tracker</div>
+        <h1>Track smarter,<br>not harder.<br><span class="gradient-text">Know your body.</span></h1>
+        <p>Avocado is the nutrition tracker that learns your real maintenance calories, spots vitamin gaps, and suggests real foods to fix them — all without a subscription.</p>
+        <div class="hero-cta">
+            <a href="https://github.com/rohitdas2/avocado" class="btn-primary" target="_blank">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+            <a href="#features" class="btn-secondary">Explore Features ↓</a>
+        </div>
+    </div>
+    <div class="hero-image">
+        <img src="images/hero.png" alt="Avocado app dashboard showing calorie ring and macro tracking">
+    </div>
+</section>
+
+<div class="stats-bar">
+    <div class="stat">
+        <div class="stat-value">25+</div>
+        <div class="stat-label">Micronutrients Tracked</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">Free & Open Source</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">0</div>
+        <div class="stat-label">Subscriptions Required</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">∞</div>
+        <div class="stat-label">Food Database (USDA)</div>
+    </div>
+</div>
+
+<section class="features" id="features">
+    <div class="section-label reveal">Core Features</div>
+    <h2 class="section-title reveal">Everything the paid apps do.<br>Without the paywall.</h2>
+    <p class="section-subtitle reveal">Avocado gives you pro-level nutrition tools with a beautiful dark-mode interface — powered by real science, not marketing.</p>
+
+    <div class="features-grid">
+        <div class="feature-card reveal">
+            <div class="feature-icon" style="background: rgba(181,217,59,0.12);">🎯</div>
+            <h3>Adaptive Maintenance Calories</h3>
+            <p>Your TDEE updates automatically based on your actual weight trends and intake — not just a formula. Gets smarter every day you log.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon" style="background: rgba(255,125,125,0.12);">💊</div>
+            <h3>Micronutrient Deficiency Alerts</h3>
+            <p>Tracks 25 vitamins & minerals against RDA targets. Color-coded dashboard shows gaps instantly with food suggestions to fix them.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon" style="background: rgba(244,185,66,0.12);">📷</div>
+            <h3>Barcode Scanner</h3>
+            <p>Scan any packaged food to instantly log nutrition data. Powered by Open Food Facts — the world's largest open food database.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon" style="background: rgba(78,205,196,0.12);">❤️</div>
+            <h3>Apple Health Integration</h3>
+            <p>Steps, active energy, and weight sync from Apple Health. Your maintenance calories adjust based on real activity data.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon" style="background: rgba(232,213,163,0.12);">📊</div>
+            <h3>Weight Trend Analysis</h3>
+            <p>EMA-smoothed weight trends cut through water weight noise to show your real trajectory. Confidence scoring rates data quality.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon" style="background: rgba(181,217,59,0.12);">🔍</div>
+            <h3>USDA Food Database</h3>
+            <p>Search 380,000+ foods from the USDA FoodData Central database. Full nutrition profiles with macros and micronutrients.</p>
+        </div>
+    </div>
+</section>
+
+<section class="insights-section" id="insights">
+    <div class="insights-image">
+        <img src="images/insights.png" alt="Avocado Insights screen showing TDEE, weight trend, micronutrients, and activity">
+    </div>
+    <div class="insights-text">
+        <div class="section-label reveal">Insights Tab</div>
+        <h2 class="reveal">Your body,<br>decoded.</h2>
+        <p class="reveal">The Insights tab combines HealthKit activity data, weight history, and food logs to calculate your real maintenance calories — not a generic estimate. It gets more accurate with every day you log.</p>
+        <div class="insight-pills reveal">
+            <span class="insight-pill">🧮 Adaptive TDEE</span>
+            <span class="insight-pill">📈 EMA Weight Smoothing</span>
+            <span class="insight-pill">👟 Step-Adjusted Burn</span>
+            <span class="insight-pill">🎯 Confidence Score</span>
+        </div>
+    </div>
+</section>
+
+<section class="insights-section reverse" id="micros">
+    <div class="insights-text" style="text-align: left;">
+        <div class="section-label reveal">Micronutrient Tracking</div>
+        <h2 class="reveal">Know what<br>you're missing.</h2>
+        <p class="reveal">Most trackers stop at calories and macros. Avocado tracks 25 vitamins and minerals, compares them against evidence-based RDA values, and suggests specific foods to fill the gaps.</p>
+        <div class="insight-pills reveal">
+            <span class="insight-pill" style="border-color: rgba(124,195,66,0.3); color: #7cc342;">● Adequate ≥80%</span>
+            <span class="insight-pill" style="border-color: rgba(244,185,66,0.3); color: #f4b942;">● Low 50-80%</span>
+            <span class="insight-pill" style="border-color: rgba(255,107,107,0.3); color: #ff6b6b;">● Deficient &lt;50%</span>
+        </div>
+    </div>
+    <div style="max-width: 420px;">
+        <div class="feature-card reveal" style="margin-bottom: 16px;">
+            <h3 style="margin-bottom: 14px;">Today's Micronutrient Status</h3>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+                        <span>Vitamin C</span><span style="color: #7cc342;">124%</span>
+                    </div>
+                    <div style="height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;">
+                        <div style="width: 100%; height: 100%; background: #7cc342; border-radius: 3px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+                        <span>Vitamin D</span><span style="color: #f4b942;">62%</span>
+                    </div>
+                    <div style="height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;">
+                        <div style="width: 62%; height: 100%; background: #f4b942; border-radius: 3px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+                        <span>Iron</span><span style="color: #ff6b6b;">34%</span>
+                    </div>
+                    <div style="height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;">
+                        <div style="width: 34%; height: 100%; background: #ff6b6b; border-radius: 3px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+                        <span>Calcium</span><span style="color: #7cc342;">91%</span>
+                    </div>
+                    <div style="height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;">
+                        <div style="width: 91%; height: 100%; background: #7cc342; border-radius: 3px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+                        <span>Omega-3</span><span style="color: #f4b942;">55%</span>
+                    </div>
+                    <div style="height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;">
+                        <div style="width: 55%; height: 100%; background: #f4b942; border-radius: 3px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cta-section">
+    <h2 class="reveal">Ready to eat smarter? 🥑</h2>
+    <p class="reveal">Avocado is free, open source, and built with SwiftUI. Clone the repo, build in Xcode, and start tracking today.</p>
+    <a href="https://github.com/rohitdas2/avocado" class="btn-primary reveal" target="_blank">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        Get Started on GitHub
+    </a>
+</section>
+
+<footer>
+    <p>Built with 💚 using SwiftUI &amp; SwiftData · <a href="https://github.com/rohitdas2/avocado">rohitdas2/avocado</a></p>
+</footer>
+
+<script>
+    // Scroll reveal animations
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Parallax glow follow
+    document.addEventListener('mousemove', (e) => {
+        const glow = document.querySelector('.glow-3');
+        if (glow) {
+            const x = (e.clientX / window.innerWidth) * 100;
+            const y = (e.clientY / window.innerHeight) * 100;
+            glow.style.left = x + '%';
+            glow.style.top = y + '%';
+        }
+    });
+</script>
+
+</body>
+</html>
