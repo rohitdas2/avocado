@@ -1,0 +1,38 @@
+# Render blueprint for the Avocado API and its PostgreSQL database (render.com → New → Blueprint).
+# The website itself is published by .github/workflows/pages.yml to GitHub Pages and calls this API.
+services:
+  - type: web
+    name: avocado-api
+    runtime: python
+    plan: free
+    rootDir: web
+    buildCommand: pip install -r requirements.txt
+    # schema.sql is repeatable, so every deploy brings the database up to date before serving.
+    startCommand: python -m server.migrate && gunicorn --config gunicorn.conf.py server.wsgi:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.9
+      - key: HOST
+        value: 0.0.0.0
+      - key: AVOCADO_ENV
+        value: production
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Render's proxy is one hop; the credential rate limit then sees each client's own address.
+      - key: PROXY_HOPS
+        value: "1"
+      - key: ALLOWED_ORIGINS
+        value: https://rohitdas2.github.io
+      - key: USDA_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: avocado-db
+          property: connectionString
+
+databases:
+  - name: avocado-db
+    plan: free
+    databaseName: avocado
+    user: avocado

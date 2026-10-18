@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from dotenv import load_dotenv
 from flask import Flask, g, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .auth import (GUEST_COOKIE, SESSION_COOKIE, SESSION_SECONDS, account_response,
                    cookie_token, hash_password, new_token, public_account,
@@ -34,8 +35,17 @@ def create_app(store=None, nutrition_search=search_foods, config=None):
     app.config.update(MAX_CONTENT_LENGTH=16 * 1024,
                       COOKIE_SECURE=os.getenv("AVOCADO_ENV", os.getenv("NODE_ENV")) == "production",
                       CREDENTIAL_LIMIT=20)
+    # The website can be served from another origin (GitHub Pages) and call this API with bearer
+    # tokens. Only these exact origins get CORS headers; credentials (cookies) are never allowed
+    # cross-origin, so cookie sessions stay same-origin and keep their CSRF protection.
+    app.config["ALLOWED_ORIGINS"] = {origin.strip().rstrip("/") for origin in os.getenv("ALLOWED_ORIGINS", "").split(",") if origin.strip()}
     if config:
         app.config.update(config)
+    # Behind a hosting proxy, remote_addr is the proxy; trust exactly PROXY_HOPS forwarded hops so
+    # the credential rate limit counts real clients instead of one shared proxy address.
+    proxy_hops = int(os.getenv("PROXY_HOPS", "0"))
+    if proxy_hops:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=proxy_hops, x_host=proxy_hops)
 
     def get_connection():
         if "database" not in g:
@@ -84,6 +94,9 @@ def create_app(store=None, nutrition_search=search_foods, config=None):
     def authorize():
         if not request.path.startswith("/api/"):
             return None
+        if request.method == "OPTIONS":
+            # CORS preflight carries no credentials; response_headers adds the allowlisted headers.
+            return "", 204
         if request.method not in ("GET", "HEAD", "OPTIONS") and not request.headers.get("Authorization"):
             origin = request.headers.get("Origin")
             foreign_origin = False
@@ -93,7 +106,10 @@ def create_app(store=None, nutrition_search=search_foods, config=None):
                     foreign_origin = parsed.scheme not in ("http", "https") or parsed.netloc.lower() != request.host.lower()
                 except ValueError:
                     foreign_origin = True
-            if foreign_origin or request.headers.get("Sec-Fetch-Site") == "cross-site":
+            # Allowlisted sites (GitHub Pages) start sessions here before they hold a token. SameSite=Strict
+            # cookies never travel cross-site, so this cannot be used to write with a cookie session.
+            allowlisted = bool(origin) and origin.rstrip("/") in app.config["ALLOWED_ORIGINS"]
+            if not allowlisted and (foreign_origin or request.headers.get("Sec-Fetch-Site") == "cross-site"):
                 return error("This request must come from Avocado.", 403)
         if request.endpoint not in ("health", "guest", "register", "login"):
             token = request_token(request)
@@ -116,6 +132,14 @@ def create_app(store=None, nutrition_search=search_foods, config=None):
     def response_headers(response):
         if request.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+            origin = (request.headers.get("Origin") or "").rstrip("/")
+            response.headers.add("Vary", "Origin")
+            if origin and origin in app.config["ALLOWED_ORIGINS"]:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+                response.headers["Access-Control-Expose-Headers"] = "Retry-After"
+                response.headers["Access-Control-Max-Age"] = "600"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 

@@ -10,6 +10,22 @@ export class ApiError extends Error {
 
 type RequestOptions = RequestInit & { notifyUnauthorized?: boolean };
 
+// Same-origin builds (Flask serves the site) use HttpOnly cookies. A build with VITE_API_URL
+// (the GitHub Pages site) calls that API cross-origin with a bearer token, the transport the mobile
+// app uses. Third-party cookies are blocked by browsers, so the token is kept in localStorage; it
+// is the only secret stored there, and the page loads no third-party scripts.
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '';
+const TOKEN_KEY = 'avocado.token';
+export const usesBearerToken = API_URL !== '';
+let memoryToken: string | null = null;
+function storedToken() {
+  try { return localStorage.getItem(TOKEN_KEY) ?? memoryToken; } catch { return memoryToken; }
+}
+function storeToken(token: string) {
+  memoryToken = token;
+  try { localStorage.setItem(TOKEN_KEY, token); } catch { /* Without storage the session lasts until reload. */ }
+}
+
 // Browser sessions stay in HttpOnly cookies. Mutations are never retried here:
 // a lost response can follow a committed write, so an automatic retry could duplicate it.
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -27,12 +43,14 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
   if (init.body != null && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const token = usesBearerToken ? storedToken() : null;
+  if (token) headers.set('Authorization', `Bearer ${token}`);
 
   try {
-    const response = await fetch(`/api${path}`, {
+    const response = await fetch(`${API_URL}/api${path}`, {
       ...init,
       headers,
-      credentials: 'same-origin',
+      credentials: usesBearerToken ? 'omit' : 'same-origin',
       cache: 'no-store',
       signal: controller.signal,
     });
@@ -52,6 +70,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     }
     const result = response.status === 204 ? undefined as T : await response.json();
     if (controller.signal.aborted) throw controller.signal.reason;
+    // Session endpoints (guest, register, login) return the new session's token.
+    if (usesBearerToken && result && typeof result === 'object' && 'token' in result && typeof result.token === 'string') storeToken(result.token);
     return result;
   } catch (error) {
     if (signal?.aborted) throw error;

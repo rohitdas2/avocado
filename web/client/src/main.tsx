@@ -126,7 +126,7 @@ function App() {
 
   return <main>
     <header className={`app-header ${!account.user ? 'guest-header' : ''}`}>
-      <a className="brand" href="/" aria-label="Avocado home"><Icon name="avocado" /><span>Avocado</span></a>
+      <a className="brand" href={import.meta.env.BASE_URL} aria-label="Avocado home"><Icon name="avocado" /><span>Avocado</span></a>
       {ready && <nav className="segmented navigation" aria-label="App sections">
         {(['food', 'lifts', ...(account.user ? ['settings' as const] : [])] as const).map(item => <button key={item} className={tab === item ? 'active' : ''} aria-pressed={tab === item} onClick={() => setTab(item)}><Icon name={item === 'settings' ? 'avocado' : item} /><span>{item === 'food' ? 'Food' : item === 'lifts' ? 'Lifts' : 'Profile'}</span></button>)}
       </nav>}

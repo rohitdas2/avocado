@@ -42,8 +42,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     setSessionRevision(generation.current);
   }, []);
 
-  // Notices contain only operation identifiers. Cookies and account details never
-  // enter BroadcastChannel or localStorage; both transports reach other tabs.
+  // Notices contain only operation identifiers. Account details never enter BroadcastChannel or
+  // localStorage (a cross-origin build keeps only its session token there, see api.ts).
   const publish = useCallback((phase: 'changing' | 'changed', operation: string) => {
     const notice = { sender: sender.current, operation, phase };
     try { channel.current?.postMessage(notice); } catch { /* Storage is the fallback. */ }

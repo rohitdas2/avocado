@@ -1,0 +1,56 @@
+# Builds the website (web/client) and publishes it to GitHub Pages at /avocado/.
+# The site is static; it calls the hosted API named by the repository variable AVOCADO_API_URL
+# (Settings → Secrets and variables → Actions → Variables), e.g. https://avocado-api.onrender.com.
+# Repository Settings → Pages → Source must be "GitHub Actions".
+name: Deploy website to Pages
+
+on:
+  push:
+    branches: [main]
+    paths: [web/client/**, web/package.json, web/package-lock.json, web/tsconfig.json, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Require the API address
+        run: test -n "$VITE_API_URL" || { echo "Set the AVOCADO_API_URL repository variable to the hosted API's https address."; exit 1; }
+        env:
+          VITE_API_URL: ${{ vars.AVOCADO_API_URL }}
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.AVOCADO_API_URL }}
+          VITE_BASE: /avocado/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

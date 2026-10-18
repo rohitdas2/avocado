@@ -90,3 +90,13 @@ Use a test-capable database account and the root guide’s instructions. Integra
 Comments explain state, identity, cancellation, and storage decisions where a future edit could break them. Keep security and data-ownership behavior in the server even when a client performs matching validation. When changing identity transitions, test guest creation, upgrade, sign-in, sign-out restoration, cross-account isolation, and password/session revocation together. When adding an endpoint, preserve server ownership scoping and update the contract and architecture notes.
 
 Food and lift responses expose existing creation timestamps as UTC ISO-8601 `createdAt`. Both clients show device-local `HH:mm` in chronological timelines. This is the time logged, including for backdated diary entries; the selected calendar date and stored timestamp precision remain unchanged.
+
+## Website on GitHub Pages
+
+The website can also run at https://rohitdas2.github.io/avocado/ while the API runs elsewhere:
+
+1. Deploy the API and its database with the Render blueprint in `render.yaml` (render.com → New → Blueprint, pick this repository) and set `USDA_API_KEY` when asked. Every deploy runs the repeatable migration before starting Gunicorn.
+2. In GitHub → Settings → Secrets and variables → Actions → Variables, add `AVOCADO_API_URL` with the API's https address (for example `https://avocado-api.onrender.com`).
+3. In GitHub → Settings → Pages, set Source to “GitHub Actions”. `.github/workflows/pages.yml` then builds `web/client` with `/avocado/` as its base path and publishes it on every push to `main` that changes the client.
+
+A build with `VITE_API_URL` calls that API with a bearer token kept in `localStorage` (browsers block third-party cookies), the same transport the mobile app uses. The API sends CORS headers only to the origins in `ALLOWED_ORIGINS` and never allows credentialed (cookie) requests across origins. `PROXY_HOPS=1` makes the login rate limit see each client's address behind Render's proxy.

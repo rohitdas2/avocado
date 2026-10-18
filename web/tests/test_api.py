@@ -121,6 +121,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertGreater(int(response.headers["Retry-After"]), 0)
 
+    def test_allowlisted_site_uses_bearer_tokens_cross_origin(self):
+        pages = "https://rohitdas2.github.io"
+        app = create_app(MemoryStore(), config={"TESTING": True, "ALLOWED_ORIGINS": {pages}})
+        client = app.test_client(use_cookies=False)
+        # Preflight needs no session and returns the allowlisted CORS headers, never credentials.
+        preflight = client.options("/api/entries", headers={"Origin": pages, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization, content-type"})
+        self.assertEqual(preflight.status_code, 204)
+        self.assertEqual(preflight.headers["Access-Control-Allow-Origin"], pages)
+        self.assertIn("Authorization", preflight.headers["Access-Control-Allow-Headers"])
+        self.assertNotIn("Access-Control-Allow-Credentials", preflight.headers)
+        guest = client.post("/api/auth/guest", headers={"Origin": pages})
+        self.assertEqual(guest.status_code, 201, guest.json)
+        self.assertEqual(guest.headers["Access-Control-Allow-Origin"], pages)
+        headers = {"Origin": pages, **self.bearer(guest.json["token"])}
+        self.assertEqual(client.post("/api/entries", json=FOOD, headers=headers).status_code, 201)
+        listed = client.get(f"/api/entries?date={FOOD['date']}", headers=headers)
+        self.assertEqual((listed.status_code, listed.json["total"]), (200, 320))
+        # A cross-site request carries no session cookie, so without a token it is unauthenticated.
+        self.assertEqual(client.post("/api/entries", json=FOOD, headers={"Origin": pages, "Sec-Fetch-Site": "cross-site"}).status_code, 401)
+        # Other origins get no CORS headers, and their non-bearer writes stay refused.
+        other = client.get("/api/entries?date=2026-10-16", headers={"Origin": "https://foreign.example", **self.bearer(guest.json["token"])})
+        self.assertNotIn("Access-Control-Allow-Origin", other.headers)
+        self.assertEqual(app.test_client().post("/api/auth/guest", headers={"Origin": "https://foreign.example"}).status_code, 403)
+
     def test_browser_writes_reject_foreign_origins(self):
         self.register()
         self.assertEqual(self.api.post("/api/entries", json=FOOD, headers={"Origin": "https://foreign.example"}).status_code, 403)
