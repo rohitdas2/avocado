@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Avocado",
+    "slug": "avocado",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-router",
+      "expo-splash-screen",
+      "expo-system-ui",
+      "expo-secure-store"
+    ],
+    "scheme": "avocado"
+  }
+}
