@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS exercises (
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Stable IDs (UUIDv5 of the slug) keep references identical across every database.
+-- Stable, hard-coded IDs (UUIDv5) keep references identical across every database; never change one.
 INSERT INTO exercises (id, slug, name, category, aliases) VALUES
   ('120aac58-9341-55e8-afcf-e209a167db42', 'back-squat', 'Back squat', 'legs', '{squat}'),
   ('4444f723-7051-5d99-88d5-9d9c4de04bd8', 'front-squat', 'Front squat', 'legs', '{}'),
@@ -84,6 +84,7 @@ INSERT INTO exercises (id, slug, name, category, aliases) VALUES
   ('7d8002bf-0d46-57f5-a8bd-63bc7377ad55', 'romanian-deadlift', 'Romanian deadlift', 'legs', '{rdl}'),
   ('e65a4e83-f099-52ed-875f-b595e163e5d4', 'leg-press', 'Leg press', 'legs', '{}'),
   ('19439fa0-5fc6-5bd4-93f2-7132e886dfbc', 'lunge', 'Lunge', 'legs', '{lunges}'),
+  ('b31a8e7c-c54b-5e42-b76b-8fce5c46b441', 'bulgarian-split-squat', 'Bulgarian split squat', 'legs', '{split squat,bss,rear foot elevated split squat,rfess}'),
   ('6421f8c0-dee0-5461-8e1f-148600f7846e', 'leg-curl', 'Leg curl', 'legs', '{}'),
   ('36f64b58-a197-540f-8981-c9b32d9a4d05', 'leg-extension', 'Leg extension', 'legs', '{}'),
   ('d8ae2073-345c-5167-b985-5085eaeb1507', 'calf-raise', 'Calf raise', 'legs', '{calf raises}'),

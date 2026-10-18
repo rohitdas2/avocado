@@ -1,95 +1,92 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { request } from './api';
-import { Icon } from './Icon';
-import { emptyMacros, macroPayload, MacroInputs } from './MacroInputs';
+import NutritionFields, { emptyMacros, parseMacros, validMacros, type MacroDraft } from './NutritionFields';
 
 type CustomFood = { id: string; name: string; calories: number; protein: number | null; carbs: number | null; fat: number | null };
 
-export default function CustomFoods({ date, onAdded }: { date: string; onAdded: () => void }) {
+// Mirrors mobile/CustomFoods.tsx: saved per-serving foods. Log copies the values into a diary
+// entry (a snapshot, so editing or deleting the saved food never rewrites past days).
+export default function CustomFoods({ date, onLogged }: { date: string; onLogged: () => void }) {
   const [foods, setFoods] = useState<CustomFood[] | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
-  const [macros, setMacros] = useState(emptyMacros);
+  const [macros, setMacros] = useState<MacroDraft>(emptyMacros);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [revision, setRevision] = useState(0);
+  const [status, setStatus] = useState('');
   const lock = useRef(false);
-  const generation = useRef(0);
+  const version = useRef(0);
   const lifecycle = useRef<AbortController | null>(null);
+
+  const refresh = useCallback(() => {
+    if (lock.current) return;
+    const request_ = ++version.current;
+    request<{ foods: CustomFood[] }>('/custom-foods', { signal: lifecycle.current?.signal })
+      .then(result => { if (!lifecycle.current?.signal.aborted && request_ === version.current) setFoods(result.foods); })
+      .catch(e => { if (!lifecycle.current?.signal.aborted && request_ === version.current) setError(e.message); });
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     lifecycle.current = controller;
-    return () => controller.abort();
-  }, []);
+    refresh();
+    // Foreground refresh, as on mobile: focus, becoming visible, and every 15 s while visible.
+    const reload = () => { if (document.visibilityState === 'visible') refresh(); };
+    const timer = window.setInterval(reload, 15000);
+    window.addEventListener('focus', reload);
+    document.addEventListener('visibilitychange', reload);
+    return () => { controller.abort(); version.current += 1; window.clearInterval(timer); window.removeEventListener('focus', reload); document.removeEventListener('visibilitychange', reload); };
+  }, [refresh]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const version = ++generation.current;
-    request<{ foods: CustomFood[] }>('/custom-foods', { signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted && version === generation.current) { setFoods(result.foods); setError(''); } })
-      .catch(failure => { if (!controller.signal.aborted && version === generation.current) setError(failure.message); });
-    return () => controller.abort();
-  }, [revision]);
-
-  useEffect(() => {
-    const refresh = () => { if (!lock.current && document.visibilityState === 'visible') setRevision(value => value + 1); };
-    const timer = window.setInterval(refresh, 15000);
-    window.addEventListener('focus', refresh);
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
-  }, []);
-
-  async function perform(action: () => Promise<void>) {
+  async function perform(action: (signal?: AbortSignal) => Promise<void>, message: string) {
     if (lock.current) return;
-    lock.current = true; generation.current += 1; setBusy(true); setError('');
-    try { await action(); }
-    catch (failure) { if (!lifecycle.current?.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not save.'); }
-    finally { lock.current = false; setBusy(false); }
+    lock.current = true; version.current += 1; setBusy(true); setError(''); setStatus('');
+    try { await action(lifecycle.current?.signal); if (!lifecycle.current?.signal.aborted) setStatus(message); }
+    catch (e) { if (!lifecycle.current?.signal.aborted) setError((e as Error).message); }
+    finally { lock.current = false; if (!lifecycle.current?.signal.aborted) setBusy(false); }
   }
 
   function save(event: FormEvent) {
     event.preventDefault();
-    void perform(async () => {
-      const food = await request<CustomFood>('/custom-foods', { method: 'POST', signal: lifecycle.current?.signal, body: JSON.stringify({ name, calories: Number(calories), ...macroPayload(macros) }) });
-      setFoods(current => [...(current ?? []), food]);
-      setName(''); setCalories(''); setMacros(emptyMacros); setEditing(false);
-    });
+    if (!name.trim() || !/^\d+$/.test(calories) || Number(calories) > 100000 || !validMacros(macros)) { setError('Enter a name, whole-number calories, and optional macros from 0–100,000 g.'); return; }
+    void perform(async signal => {
+      const food = await request<CustomFood>('/custom-foods', { method: 'POST', signal, body: JSON.stringify({ name: name.trim(), calories: Number(calories), ...parseMacros(macros) }) });
+      setFoods(old => [...(old || []), food]); setCreating(false); setName(''); setCalories(''); setMacros(emptyMacros);
+    }, 'Food saved.');
   }
 
   function log(food: CustomFood) {
-    void perform(async () => {
-      // Copy per-serving nutrients into a diary snapshot. Library changes/deletion
-      // must never rewrite nutrition that was already logged for a previous day.
-      const { id: _id, ...values } = food;
-      await request('/entries', { method: 'POST', signal: lifecycle.current?.signal, body: JSON.stringify({ ...values, date }) });
-      onAdded();
-    });
+    void perform(async signal => {
+      await request('/entries', { method: 'POST', signal, body: JSON.stringify({ name: food.name, calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat, date }) });
+      onLogged();
+    }, `${food.name} added.`);
   }
 
   function remove(food: CustomFood) {
-    void perform(async () => {
-      await request(`/custom-foods/${food.id}`, { method: 'DELETE', signal: lifecycle.current?.signal });
-      setFoods(current => current?.filter(item => item.id !== food.id) ?? []);
-    });
+    void perform(async signal => {
+      await request(`/custom-foods/${food.id}`, { method: 'DELETE', signal });
+      setFoods(old => old?.filter(value => value.id !== food.id) || []);
+    }, 'Food removed from your saved foods.');
   }
 
   return <section className="card custom-foods">
-    <div className="section-heading"><h2>Custom foods</h2><button className="quiet" disabled={busy} onClick={() => setEditing(value => !value)}>{editing ? 'Cancel' : 'New food'}</button></div>
-    {error && <p className="error" role="alert">{error}{!foods && <button className="quiet" disabled={busy} onClick={() => setRevision(value => value + 1)}>Retry</button>}</p>}
-    {editing && <form onSubmit={save} className="custom-food-form">
+    <div className="section-heading"><h2>Custom foods</h2><button className="quiet" disabled={busy} onClick={() => { setCreating(!creating); setError(''); setStatus(''); }}>{creating ? 'Cancel' : 'New food'}</button></div>
+    {creating && <form onSubmit={save} className="custom-food-form" noValidate>
       <p className="caption">Nutrition per serving</p>
-      <label htmlFor="custom-name">Food</label><input id="custom-name" placeholder="Homemade oatmeal" maxLength={120} required value={name} disabled={busy} onChange={event => setName(event.target.value)} />
-      <label htmlFor="custom-calories">Calories <span className="muted">(kcal)</span></label><input id="custom-calories" type="number" min="0" max="100000" step="1" required value={calories} disabled={busy} onChange={event => setCalories(event.target.value)} />
-      <MacroInputs prefix="custom" values={macros} disabled={busy} onChange={(macro, value) => setMacros(current => ({ ...current, [macro]: value }))} />
-      <button className="primary" disabled={busy || !name.trim()}>{busy ? 'Saving…' : 'Save food'}</button>
+      <label htmlFor="custom-name">Name</label><input id="custom-name" aria-label="Custom food name" maxLength={120} value={name} disabled={busy} onChange={event => setName(event.target.value)} />
+      <label htmlFor="custom-calories">Calories (kcal)</label><input id="custom-calories" aria-label="Custom food calories per serving" inputMode="numeric" maxLength={6} placeholder="320" value={calories} disabled={busy} onChange={event => setCalories(event.target.value)} />
+      <NutritionFields prefix="custom" values={macros} onChange={setMacros} disabled={busy} />
+      <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save food'}</button>
     </form>}
     {!foods && !error && <p className="caption" role="status">Loading…</p>}
-    {foods?.length === 0 && !editing && <p className="caption">Save foods you use often.</p>}
+    {foods?.length === 0 && !creating && <p className="caption">No custom foods yet.</p>}
     {foods && foods.length > 0 && <ul className="entry-list custom-food-list">{foods.map(food => <li key={food.id}>
-      <div className="food-name">{food.name}<p className="caption">{food.calories} kcal / serving</p><p className="caption">P {food.protein ?? '—'} · C {food.carbs ?? '—'} · F {food.fat ?? '—'} g</p></div>
-      <button className="quiet" disabled={busy} aria-label={`Log ${food.name}`} onClick={() => log(food)}>Add</button>
-      <button className="delete icon-button" disabled={busy} aria-label={`Delete custom food ${food.name}`} onClick={() => remove(food)}><Icon name="trash" /></button>
+      <div className="food-name">{food.name}<p className="caption">{food.calories.toLocaleString()} kcal · 1 serving</p><p className="caption">P {food.protein ?? '—'} · C {food.carbs ?? '—'} · F {food.fat ?? '—'} g</p></div>
+      <button className="quiet" disabled={busy} aria-label={`Log one serving of ${food.name}`} onClick={() => log(food)}>Log</button>
+      <button className="quiet danger-text" disabled={busy} aria-label={`Delete custom food ${food.name}`} onClick={() => remove(food)}>Delete</button>
     </li>)}</ul>}
+    {error && <div><p className="error" role="alert">{error}</p>{!foods && <button className="quiet" onClick={refresh}>Retry</button>}</div>}
+    {status && <p className="caption" role="status">{status}</p>}
   </section>;
 }
