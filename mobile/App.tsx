@@ -27,6 +27,9 @@ function Diary() {
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
+  // Add food has two modes sharing one card: USDA search (serving size + macro preview before
+  // confirming) or Quick add (name, calories, and macros typed by the user). Both post to /api/entries.
+  const [mode, setMode] = useState<'search' | 'quick'>('search');
   const locked = useRef(false);
   const requestVersion = useRef(0);
   const key = dateKey(date);
@@ -77,14 +80,19 @@ function Diary() {
       {!day && <Text style={common.secondary}>{error || loadError ? 'Diary unavailable' : 'Loading…'}</Text>}
     </View>
     <View style={common.card}>
-      <Text style={common.heading}>Add food</Text>
+      <View style={common.listHeader}><Text style={common.heading}>Add food</Text>{mode === 'search' && <Text style={s.source}>USDA</Text>}</View>
+      <View style={s.modes} accessibilityRole="tablist">{([['search', 'Search'], ['quick', 'Quick add']] as const).map(([value, label]) =>
+        <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: mode === value }} disabled={busy} style={[s.mode, mode === value && s.modeSelected]} onPress={() => { setMode(value); setError(''); }}>
+          <Text style={[s.modeText, mode === value && s.modeTextSelected]}>{label}</Text></Pressable>)}</View>
+      {/* key resets the search when the diary date changes, as the old standalone card did. */}
+      {mode === 'search' ? <IngredientSearch key={key} embedded date={key} onAdded={reload} /> : <>
       <View style={common.field}><Text style={common.label}>Name</Text><TextInput accessibilityLabel="Food name" style={common.input} value={name} onChangeText={setName} placeholder="Avocado toast" placeholderTextColor={colors.placeholder} maxLength={120} editable={!busy} keyboardAppearance={dark ? 'dark' : 'light'} /></View>
       <View style={common.field}><Text style={common.label}>Calories (kcal)</Text><TextInput accessibilityLabel="Calories" style={common.input} value={calories} onChangeText={setCalories} placeholder="320" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={6} editable={!busy} keyboardAppearance={dark ? 'dark' : 'light'} /></View>
       <NutritionFields values={macroDraft} onChange={setMacroDraft} disabled={busy} />
       <Pressable accessibilityRole="button" disabled={busy || !day} style={[common.button, (busy || !day) && common.disabled]} onPress={() => mutate()}><Text style={common.buttonText}>{busy ? 'Saving…' : 'Add food'}</Text></Pressable>
+      </>}
     </View>
     <CustomFoods key={`custom:${key}`} date={key} onLogged={reload} />
-    <IngredientSearch key={key} date={key} onAdded={reload} />
     <View style={common.card}>
       <View style={common.listHeader}><Text style={common.heading}>Entries</Text><Pressable accessibilityRole="button" disabled={busy} onPress={reload} style={common.textButton}><Text style={common.link}>Refresh</Text></Pressable></View>
       {day?.entries.length === 0 && <Text style={common.empty}>No food logged.</Text>}
@@ -100,4 +108,11 @@ const styles = (colors: Colors) => StyleSheet.create({
   macro: { flex: 1, gap: 5 },
   macroValue: { color: colors.text, fontSize: 17, fontWeight: '500' },
   errorCard: { backgroundColor: colors.dangerSurface, borderRadius: 12, padding: 14 },
+  source: { color: colors.secondary, fontSize: 12 },
+  // Segmented control styled like the lb/kg toggle on the Lifts screen.
+  modes: { flexDirection: 'row', backgroundColor: colors.background === '#000000' ? '#2c2c2e' : colors.background, borderRadius: 9, padding: 3 },
+  mode: { flex: 1, minHeight: 36, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  modeSelected: { backgroundColor: colors.accentSurface },
+  modeText: { color: colors.secondary, fontSize: 14 },
+  modeTextSelected: { color: colors.accent, fontWeight: '600' },
 });

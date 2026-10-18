@@ -72,7 +72,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       await ensureGuest();
       throw new Error('Couldn’t save your session securely. Try again.');
     }
-    if (mode === 'register') await SecureStore.deleteItemAsync(guestKey).catch(() => {});
+    // Both signup and login consume the guest diary and revoke its old token.
+    await SecureStore.deleteItemAsync(guestKey).catch(() => {});
   }
   async function updateName(name: string) {
     const data = await api<{ user: User }>('/account', { method: 'PATCH', body: JSON.stringify({ name }) });

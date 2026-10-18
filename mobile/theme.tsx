@@ -10,9 +10,10 @@ const lightColors = {
   secondary: '#6e6e73',
   placeholder: '#8e8e93',
   separator: '#e5e5ea',
-  accent: '#237a36',
+  // Avocado palette: skin green on light surfaces, flesh yellow-green on dark ones.
+  accent: '#4a731b',
   buttonText: '#ffffff',
-  accentSurface: '#e9f4ec',
+  accentSurface: '#eef3dc',
   danger: '#c9342d',
   dangerSurface: '#fff0ee',
 };
@@ -25,9 +26,9 @@ const darkColors: Colors = {
   secondary: '#a1a1a6',
   placeholder: '#8e8e93',
   separator: '#38383a',
-  accent: '#5bd478',
-  buttonText: '#102816',
-  accentSurface: '#173d22',
+  accent: '#b4ce62',
+  buttonText: '#1e2a0b',
+  accentSurface: '#2b3516',
   danger: '#ff6961',
   dangerSurface: '#3b1c1c',
 };

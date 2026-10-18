@@ -4,11 +4,11 @@ import { Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SessionProvider, useSession } from '../../session';
 import { ThemeProvider, useTheme } from '../../theme';
+import AvocadoIcon from '../../AvocadoIcon';
 
-function TabIcon({ name, color }: { name: 'food' | 'lifts' | 'settings'; color: ColorValue }) {
+function TabIcon({ name, color }: { name: 'food' | 'lifts'; color: ColorValue }) {
   if (name === 'food') return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[s.foodIcon, { borderColor: color }]}>{[0, 1, 2].map(value => <View key={value} style={[s.foodLine, { backgroundColor: color }]} />)}</View>;
-  if (name === 'lifts') return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={s.liftIcon}><View style={[s.weight, { borderColor: color }]} /><View style={[s.bar, { backgroundColor: color }]} /><View style={[s.weight, { borderColor: color }]} /></View>;
-  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={s.settingsIcon}>{[0, 1, 2].map(value => <View key={value} style={[s.settingLine, { backgroundColor: color }]}><View style={[s.knob, { backgroundColor: color, left: value === 1 ? 12 : 4 }]} /></View>)}</View>;
+  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={s.liftIcon}><View style={[s.weight, { borderColor: color }]} /><View style={[s.bar, { backgroundColor: color }]} /><View style={[s.weight, { borderColor: color }]} /></View>;
 }
 
 function Navigation() {
@@ -20,7 +20,8 @@ function Navigation() {
       <Tabs key={user?.id || (guest ? 'guest' : 'account')} screenOptions={{ headerShown: false, tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.separator }, tabBarActiveTintColor: colors.accent, tabBarInactiveTintColor: colors.secondary, tabBarLabelStyle: { fontSize: 11, fontWeight: '500' } }}>
         <Tabs.Screen name="index" options={{ title: 'Food', tabBarIcon: ({ color }) => <TabIcon name="food" color={color} /> }} />
         <Tabs.Screen name="lifts" options={{ title: 'Lifts', tabBarIcon: ({ color }) => <TabIcon name="lifts" color={color} /> }} />
-        <Tabs.Screen name="settings" options={{ title: 'Settings', href: guest ? null : undefined, tabBarIcon: ({ color }) => <TabIcon name="settings" color={color} /> }} />
+        {/* Profile (formerly Settings) is just the avocado: no label, accessible name "Profile". */}
+        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarShowLabel: false, tabBarAccessibilityLabel: 'Profile', href: guest ? null : undefined, tabBarIcon: ({ focused }) => <AvocadoIcon size={28} active={focused} /> }} />
         <Tabs.Screen name="auth" options={{ href: null, tabBarStyle: { display: 'none' } }} />
       </Tabs>}
   </>;
@@ -34,7 +35,4 @@ const s = StyleSheet.create({
   liftIcon: { width: 26, height: 22, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
   weight: { width: 6, height: 18, borderRadius: 2, borderWidth: 1.8 },
   bar: { width: 12, height: 2 },
-  settingsIcon: { width: 24, height: 24, justifyContent: 'space-evenly' },
-  settingLine: { height: 1.8, width: 23, borderRadius: 1 },
-  knob: { position: 'absolute', top: -2, height: 6, width: 5, borderRadius: 2 },
 });

@@ -2,7 +2,9 @@
 
 React Native / Expo app for iOS and Android. Food and Lifts use the shared Flask API in `../web`, served by Gunicorn.
 
-The app opens a guest diary automatically. Settings supports optional email accounts, name and password changes, and System, Light, or Dark appearance. Active and guest session tokens are stored with Expo SecureStore; appearance is stored locally with AsyncStorage. Creating an account keeps the current guest diary. Signing into an existing account switches diaries, and signing out restores the device's guest diary.
+The app opens a guest diary automatically. Settings supports optional email accounts, name and password changes, and System, Light, or Dark appearance. Active and guest session tokens are stored with Expo SecureStore; appearance is stored locally with AsyncStorage. Creating an account keeps the current guest diary. Signing into an existing account transfers guest entries into that account; existing account records win overlaps. Both revoke the guest credential and save a new account token. Signing out opens a fresh guest diary.
+
+Log in and Sign up in each screen header open a native sheet containing the shared `SignIn` form. Opening the sheet is local UI state; submitting calls `POST /api/auth/login` or `POST /api/auth/register`, respectively. Mobile and web share these exact Flask endpoints; mobile uses a SecureStore bearer token while the browser uses HttpOnly cookies. See architecture decision 29 for merge keys and tradeoffs.
 
 To use a phone during development, run the API on an address reachable from the phone and start Expo with `EXPO_PUBLIC_API_URL=http://YOUR_COMPUTER_LAN_IP:3001 npm start`. Keep the phone and computer on the same network and open the project in a compatible Expo Go version. `localhost` on a physical phone points to the phone. Restart Expo after changing the API URL.
 
