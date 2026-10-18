@@ -1,0 +1,11 @@
+.weight-tracker { grid-column: 1 / -1; }
+.weight-form { display: grid; grid-template-columns: minmax(150px, 1.4fr) minmax(110px, 1fr) 80px auto; align-items: end; gap: 12px; }
+.weight-form input, .weight-form select { margin: 0; min-width: 0; width: 100%; }
+.weight-form .primary { width: auto; margin: 0; white-space: nowrap; }
+.weight-remove { margin-top: 12px; }
+.weight-chart { margin: 24px 0 0; }
+.weight-chart figcaption { margin-bottom: 14px; font-size: 14px; font-weight: 600; }
+.weight-series { position: relative; }
+.weight-series svg { width: 100%; height: 100%; overflow: visible; }
+.weight-chart .caption { margin-bottom: 0; }
+@media (max-width: 620px) { .weight-form { grid-template-columns: minmax(0, 1fr) 76px; } .weight-form > div:first-child { grid-column: 1 / -1; } .weight-form > .primary { grid-column: 1 / -1; } }

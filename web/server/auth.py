@@ -13,12 +13,18 @@ DUMMY_PASSWORD = f"sha512${'0' * 32}${'0' * 128}"
 
 
 def hash_password(password):
+    """Encode the requested algorithm$salt$hexdigest reference exactly.
+
+    Each UUIDv4 salt has 122 random bits. SHA-512 hashes the salt text followed
+    by the UTF-8 password; the single stored value includes its algorithm.
+    """
     salt = uuid.uuid4().hex
     digest = hashlib.sha512((salt + password).encode("utf-8")).hexdigest()
     return f"sha512${salt}${digest}"
 
 
 def verify_password(password, account):
+    """Recompute the reference digest and compare without an early-exit match."""
     encoded = account.get("password") if account else DUMMY_PASSWORD
     if not isinstance(encoded, str) or not PASSWORD_PATTERN.fullmatch(encoded):
         return False
@@ -28,10 +34,12 @@ def verify_password(password, account):
 
 
 def new_token():
+    """Use an independent 256-bit secret for a revocable persistent session."""
     return secrets.token_hex(32)
 
 
 def token_digest(token):
+    """Keep a token lookup digest in PostgreSQL, rather than a reusable token."""
     return hashlib.sha256(token.encode("ascii")).hexdigest()
 
 

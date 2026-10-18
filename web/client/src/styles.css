@@ -1,3 +1,4 @@
+/* Shared semantic tokens keep every screen aligned in both color schemes. */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
@@ -10,15 +11,16 @@
   --text: #1d1d1f;
   --secondary: #6e6e73;
   --line: #e5e5ea;
-  --accent: #237a36;
+  --accent: #4a731b; /* avocado skin */
   --accent-text: #fff;
-  --tint: #edf6ef;
+  --tint: #eef3dc;
   --segment: #e9e9ed;
   --selected: #fff;
   --danger: #c12b25;
   --error-background: #fff0ef;
   --shadow: 0 2px 5px #0000000b;
 }
+/* System is the default; a saved Light override opts out of this media query. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -28,9 +30,9 @@
     --text: #f5f5f7;
     --secondary: #a1a1a6;
     --line: #38383a;
-    --accent: #6ada83;
-    --accent-text: #092a13;
-    --tint: #23362a;
+    --accent: #b4ce62; /* avocado flesh */
+    --accent-text: #1e2a0b;
+    --tint: #2b3516;
     --segment: #1c1c1e;
     --selected: #3a3a3c;
     --danger: #ff8279;
@@ -38,6 +40,7 @@
     --shadow: 0 2px 5px #0003;
   }
 }
+/* Explicit Dark also works when the operating system is in light mode. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --background: #000;
@@ -46,9 +49,9 @@
   --text: #f5f5f7;
   --secondary: #a1a1a6;
   --line: #38383a;
-  --accent: #6ada83;
-  --accent-text: #092a13;
-  --tint: #23362a;
+  --accent: #b4ce62; /* avocado flesh */
+  --accent-text: #1e2a0b;
+  --tint: #2b3516;
   --segment: #1c1c1e;
   --selected: #3a3a3c;
   --danger: #ff8279;
@@ -114,6 +117,9 @@ dd > span { margin-left: 4px; color: var(--secondary); font-size: 13px; font-wei
 .entry-list .food-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 15px; line-height: 1.5; }
 .entry-list strong { white-space: nowrap; font-size: 15px; font-weight: 500; }
 .entry-list .caption { margin: 3px 0 0; }
+.timeline > li { border-top: 0; }
+.log-time { position: relative; align-self: stretch; display: flex; align-items: center; min-width: 54px; padding-right: 12px; border-right: 1px solid var(--line); color: var(--secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.log-time::after { content: ''; position: absolute; right: -4px; top: calc(50% - 3px); width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 12px; flex-shrink: 0; }
 .delete { color: var(--secondary); background: transparent; }
 .delete:hover:not(:disabled) { color: var(--danger); background: var(--error-background); }
@@ -131,9 +137,6 @@ dd > span { margin-left: 4px; color: var(--secondary); font-size: 13px; font-wei
 .portion .caption { margin-bottom: 16px; }
 .portion-macros { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 0 0 20px; }
 .portion-macros dd { font-size: 18px; margin-top: 4px; }
-.lift-form { grid-column: 2; grid-row: 1; }
-.lift-fields { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 10px; }
-.lift-fields input, .lift-fields select { margin-top: 8px; padding-left: 10px; padding-right: 7px; }
 .error { padding: 12px 15px; margin: 0 0 18px; color: var(--danger); background: var(--error-background); border-radius: 10px; font-size: 13px; line-height: 1.5; }
 .error .quiet { color: var(--danger); }
 .settings-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
@@ -185,3 +188,103 @@ form > .caption { margin: -9px 0 18px; }
   .auth-card { margin: 35px auto; padding: 24px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Shared per-serving and quick-entry macro fields use the same units/validation. */
+.macro-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.macro-fields label { font-size: 12px; }
+.macro-fields input { margin-top: 8px; padding-left: 10px; padding-right: 8px; }
+.app-header .navigation { margin-left: auto; }
+.header-actions { display: flex; align-items: center; gap: 4px; }
+.header-actions .quiet { padding-left: 12px; padding-right: 12px; }
+.signup-button { background: var(--accent); color: var(--accent-text); }
+.custom-foods .section-heading { margin-bottom: 8px; }
+.custom-foods .section-heading .quiet { margin-right: -12px; }
+.custom-food-form { padding: 12px 0 20px; }
+.custom-food-form > .caption { margin: 0 0 18px; }
+.custom-food-list .food-name { font-size: 14px; }
+.custom-food-list .quiet { padding: 10px; }
+.custom-food-list .caption { font-size: 11px; }
+@media (max-width: 740px) {
+  .guest-header { flex-wrap: wrap; gap: 16px; }
+  .guest-header .navigation { order: 3; width: 100%; margin-left: 0; }
+  .guest-header .navigation button { flex: 1; }
+  .header-actions { margin-left: auto; }
+  .header-actions button { font-size: 13px; padding: 10px 12px; }
+  .macro-fields { gap: 8px; }
+}
+
+/* Shared line charts (weight, exercise progress): a stretched SVG line with HTML markers on top,
+   so markers stay round and are real buttons. */
+.grid { stroke: var(--line); stroke-width: 1; }
+.progress-chart { margin: 0; }
+.chart-area { position: relative; }
+.chart-area svg { height: 100%; }
+.progress-chart svg, .weight-series svg { display: block; width: 100%; overflow: visible; }
+.progress-chart figcaption, .chart-legend { display: flex; justify-content: space-between; gap: 12px; color: var(--secondary); font-size: 12px; }
+.progress-chart figcaption { margin-bottom: 8px; }
+.chart-legend { margin-top: 8px; }
+.gain { color: var(--accent); }
+.chart-points { position: absolute; left: 0; right: 0; bottom: 0; top: 0; pointer-events: none; }
+.chart-point { position: absolute; width: 32px; height: 32px; min-height: 0; margin: -16px 0 0 -16px; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border-radius: 50%; pointer-events: auto; }
+.chart-point span { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+.chart-point.best span { background: var(--text); }
+.chart-point.focused span { width: 13px; height: 13px; }
+.chart-point:hover:not(:disabled) { filter: none; background: var(--tint); }
+
+/* Lifts: workouts, the current workout's exercises and sets, and the set logger. */
+.lift-layout .entry-tools { grid-column: 2; }
+.lift-column { display: grid; gap: 24px; grid-column: 1; grid-row: 1; min-width: 0; }
+.lift-column .diary { grid-row: auto; grid-column: auto; min-height: 0; }
+.field-label { margin: 0 0 6px; color: var(--secondary); font-size: 12px; font-weight: 500; }
+h2.tight { margin-bottom: 2px; }
+.stack { display: grid; gap: 6px; margin-top: 18px; }
+.danger-text { color: var(--danger); }
+.picker { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 46px; margin: 0 0 18px; padding: 12px 13px; border: 1px solid var(--line); text-align: left; font-size: 15px; font-weight: 400; }
+.checkbox { display: flex; align-items: center; gap: 10px; margin: -6px 0 18px; font-size: 14px; cursor: pointer; }
+.checkbox input { width: 18px; height: 18px; min-height: 0; margin: 0; accent-color: var(--accent); }
+.set-fields { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; margin-top: 16px; }
+.set-fields input, .set-fields select { margin-top: 8px; padding-left: 10px; padding-right: 7px; }
+.exercise-progress { display: grid; gap: 12px; padding: 14px 0 4px; border-top: 1px solid var(--line); }
+.exercise-progress > .caption, .exercise-progress p.caption { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: grid; gap: 2px; padding: 8px 11px; border: 1px solid var(--line); background: transparent; text-align: left; font-size: 13px; font-weight: 400; }
+.chip span { color: var(--secondary); font-size: 11px; font-weight: 600; }
+.chip.accent { background: var(--tint); border-color: var(--tint); }
+.chip.accent span { color: var(--accent); }
+.current-workout .section-heading { align-items: flex-start; }
+.superset { margin-top: 6px; padding-left: 12px; border-left: 3px solid var(--accent); }
+.superset > .field-label { padding-top: 10px; }
+.workout-exercise { padding: 8px 10px 10px; margin: 0 -10px; border-radius: 12px; }
+.workout-exercise + .workout-exercise { border-top: 1px solid var(--line); border-radius: 0; }
+.workout-exercise.active { background: var(--tint); border-radius: 12px; border-top-color: transparent; }
+.exercise-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.exercise-name { min-height: 36px; padding: 6px 0; background: transparent; font-size: 15px; text-align: left; }
+.workout-exercise.active .exercise-name { color: var(--accent); font-weight: 650; }
+.set-list { list-style: none; margin: 0; padding: 0; }
+.set-list li { display: flex; align-items: center; gap: 12px; min-height: 34px; color: var(--secondary); font-size: 14px; font-variant-numeric: tabular-nums; }
+.set-list li > span:nth-child(2) { flex: 1; }
+.set-number { width: 18px; text-align: right; }
+.icon-button.small { width: 34px; height: 34px; min-height: 0; padding: 9px; }
+.small-link { min-height: 32px; padding: 4px 0; font-size: 12px; }
+.workout-row { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 4px 0; background: transparent; text-align: left; font-weight: 400; }
+.workout-row:disabled { opacity: 1; }
+.caption.block { display: block; margin-top: 3px; }
+.chevron { color: var(--accent); font-size: 20px; }
+.max-set { display: grid; justify-items: end; gap: 2px; white-space: nowrap; }
+dialog.sheet { width: min(520px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 64px)); padding: 24px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
+dialog.sheet::backdrop { background: #00000080; }
+.picker-results { max-height: 420px; margin-top: 0; }
+.result.chosen { color: var(--accent); }
+
+/* Profile → Progress. */
+.progress-list .workout-row { padding: 0; }
+.progress-list li { padding: 12px 0; }
+.progress-exercise { margin-bottom: 12px; font-size: 20px; }
+.progress-subheading { margin: 12px 0 8px; }
+.back { padding-left: 0; }
+.day-arrow { min-width: 36px; padding: 6px 8px; font-size: 22px; line-height: 1; }
+@media (max-width: 740px) {
+  .lift-column { gap: 20px; width: 100%; }
+  .set-fields { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .datebar .day-arrow { padding: 6px; }
+}

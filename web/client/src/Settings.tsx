@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { AuthScreen, useAccount } from './Account';
+import { useAccount } from './Account';
+import WeightTracker from './WeightTracker';
+import Progress from './Progress';
 
 export type Preferences = { appearance: 'system' | 'light' | 'dark' };
+// Only non-sensitive device preferences belong in localStorage; identity lives on the server.
 export const PREFERENCES_KEY = 'avocado.preferences';
 
 export function loadPreferences(): Preferences {
@@ -27,6 +30,7 @@ export default function Settings({ preferences, onChange }: { preferences: Prefe
   const [busy, setBusy] = useState<'profile' | 'password' | 'logout' | null>(null);
   const [error, setError] = useState<{ section: 'profile' | 'password' | 'logout'; text: string } | null>(null);
   const [saved, setSaved] = useState<'profile' | 'password' | null>(null);
+  // Serialize account mutations while keeping feedback beside the relevant form.
   const pending = useRef(false);
 
   useEffect(() => { setName(account.user?.name ?? ''); }, [account.user?.name]);
@@ -70,23 +74,18 @@ export default function Settings({ preferences, onChange }: { preferences: Prefe
 
   function appearance(value: Preferences['appearance']) {
     const next = { ...preferences, appearance: value };
+    // Storage can be blocked or full; appearance still works for this browser session.
     try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(next)); } catch { /* Keep the choice for this session. */ }
     onChange(next);
   }
 
-  return <div className="settings-layout">
-    <section className="card" aria-labelledby="appearance-title">
-      <h2 id="appearance-title" className="section-heading">Appearance</h2>
-      <fieldset className="segmented appearance-options">
-        <legend className="sr-only">Appearance</legend>
-        {(['system', 'light', 'dark'] as const).map(value => <label key={value} className={preferences.appearance === value ? 'selected' : ''}>
-          <input type="radio" name="appearance" value={value} checked={preferences.appearance === value} onChange={() => appearance(value)} />
-          <span>{value[0].toUpperCase() + value.slice(1)}</span>
-        </label>)}
-      </fieldset>
-    </section>
+  if (!account.user) return null;
 
-    {!account.user ? <AuthScreen inline /> : <>
+  return <div className="settings-layout">
+    <Progress />
+
+    <WeightTracker />
+
     <section className="card" aria-labelledby="profile-title">
       <h2 id="profile-title" className="section-heading">Account</h2>
       <form onSubmit={saveName} aria-busy={busy === 'profile'}>
@@ -123,10 +122,20 @@ export default function Settings({ preferences, onChange }: { preferences: Prefe
       </form>
     </section>
 
+    <section className="card" aria-labelledby="appearance-title">
+      <h2 id="appearance-title" className="section-heading">Appearance</h2>
+      <fieldset className="segmented appearance-options">
+        <legend className="sr-only">Appearance</legend>
+        {(['system', 'light', 'dark'] as const).map(value => <label key={value} className={preferences.appearance === value ? 'selected' : ''}>
+          <input type="radio" name="appearance" value={value} checked={preferences.appearance === value} onChange={() => appearance(value)} />
+          <span>{value[0].toUpperCase() + value.slice(1)}</span>
+        </label>)}
+      </fieldset>
+    </section>
+
     <section className="card signout-card">
       {error?.section === 'logout' && <p className="error" role="alert">{error.text}</p>}
-      <button className="quiet" disabled={busy !== null} onClick={() => void perform('logout', account.signOut)}>{busy === 'logout' ? 'Signing out…' : 'Sign out'}</button>
+      <button className="quiet" disabled={busy !== null} onClick={() => void perform('logout', account.signOut)}>{busy === 'logout' ? 'Logging out…' : 'Log out'}</button>
     </section>
-    </>}
   </div>;
 }

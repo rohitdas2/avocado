@@ -3,5 +3,6 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   build: { outDir: '../dist', emptyOutDir: true },
-  server: { host: '127.0.0.1', proxy: { '/api': 'http://127.0.0.1:3001' } }
+  // Preserve the browser-facing Host so Flask can compare it with Origin.
+  server: { host: '127.0.0.1', proxy: { '/api': { target: 'http://127.0.0.1:3001', changeOrigin: false } } }
 });
