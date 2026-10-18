@@ -9,12 +9,13 @@ import { type Colors, useTheme } from '../../theme';
 import useForegroundRefresh from '../../useForegroundRefresh';
 import ScreenHeader from '../../ScreenHeader';
 import ExerciseProgress, { setsSummary, type Target } from '../../ExerciseProgress';
+import { groupSupersets, resolveTarget } from '../../workoutLogic';
 
 // The catalog is app-owned: users choose a definition and record their own sets against it.
 type CatalogExercise = { id: string; slug: string; name: string; category: string };
 type ExerciseSet = { id: string; setNumber: number; reps: number; weight: number; unit: 'lb' | 'kg' };
 // exerciseId is null only for migrated history whose typed name matched no catalog entry.
-type Exercise = { id: string; exerciseId: string | null; exercise: string; createdAt?: string; sets: ExerciseSet[] };
+type Exercise = { id: string; exerciseId: string | null; exercise: string; createdAt?: string; supersetId: string | null; sets: ExerciseSet[] };
 type Workout = { id: string; name: string; date: string; createdAt: string; isCurrent: boolean; exercises: Exercise[] };
 
 export default function Lifts() {
@@ -34,8 +35,12 @@ export default function Lifts() {
   const [query, setQuery] = useState('');
   const [weight, setWeight] = useState('');
   const [unit, setUnit] = useState<'lb' | 'kg'>('lb');
-  const [sets, setSets] = useState('3');
   const [reps, setReps] = useState('10');
+  // Sets are logged one at a time. activeId is the exercise in the current workout that the next
+  // set goes to (tap an exercise to switch, which is how supersets alternate). supersetNew makes a
+  // newly chosen exercise join the active one's superset.
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [supersetNew, setSupersetNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -96,18 +101,43 @@ export default function Lifts() {
     requestVersion.current += 1; setWorkouts(null); setSelectedId(null); setError(''); setLoadError('');
     setDate(new Date(year, month - 1, day));
   }
-  async function save() {
+  // The exercise entry the next set belongs to: the active one if it is the chosen exercise,
+  // otherwise the latest entry of that exercise in this workout; none means a new entry.
+  const active = current?.exercises.find(entry => entry.id === activeId);
+  const target = resolveTarget(current?.exercises || [], activeId, choice?.id || null);
+  const nextSetNumber = (target?.sets.length || 0) + 1;
+  const replaceEntry = (entry: Exercise) => setWorkouts(old => old?.map(item => item.id === current?.id ? { ...item, exercises: item.exercises.some(e => e.id === entry.id) ? item.exercises.map(e => e.id === entry.id ? entry : e) : [...item.exercises, entry] } : item) || []);
+  async function logSet() {
     if (lock.current || !current) return;
     if (!choice) { setError('Choose an exercise.'); return; }
-    if (!weight.trim() || !Number.isFinite(Number(weight)) || Number(weight) < 0 || Number(weight) > 10000 || !/^\d+$/.test(sets) || !/^\d+$/.test(reps) || Number(sets) < 1 || Number(sets) > 100 || Number(reps) < 1 || Number(reps) > 1000) {
-      setError('Enter weight (0–10,000), sets (1–100), and reps (1–1,000).'); return;
+    if (!weight.trim() || !Number.isFinite(Number(weight)) || Number(weight) < 0 || Number(weight) > 10000 || !/^\d+$/.test(reps) || Number(reps) < 1 || Number(reps) > 1000) {
+      setError('Enter weight (0–10,000) and reps (1–1,000).'); return;
     }
-    // Each set is stored individually; this form records sets of equal reps and weight.
-    const body = { exerciseId: choice.id, sets: Array.from({ length: Number(sets) }, () => ({ reps: Number(reps), weight: Number(weight), unit })) };
+    const set = { reps: Number(reps), weight: Number(weight), unit };
     await mutate(async () => {
-      const entry = await api<Exercise>(`/workouts/${current.id}/exercises`, { method: 'POST', body: JSON.stringify(body) });
-      setWorkouts(old => old?.map(item => item.id === current.id ? { ...item, exercises: [...item.exercises, entry] } : item) || []);
-      setChoice(null);
+      // Existing entry: append one set. New entry: create it with this first set, optionally
+      // joining the active exercise's superset. Weight and reps stay filled for the next set.
+      const entry = target
+        ? await api<Exercise>(`/workouts/${current.id}/exercises/${target.id}/sets`, { method: 'POST', body: JSON.stringify(set) })
+        : await api<Exercise>(`/workouts/${current.id}/exercises`, { method: 'POST', body: JSON.stringify({ exerciseId: choice.id, sets: [set], supersetWith: supersetNew && active ? active.id : null }) });
+      replaceEntry(entry);
+      setActiveId(entry.id); setSupersetNew(false);
+    });
+  }
+  async function removeSet(entry: Exercise, setId: string) {
+    if (!current) return;
+    await mutate(async () => {
+      // The last set's removal also removes the exercise (the server keeps every exercise non-empty).
+      const result = await api<{ exercise: Exercise | null }>(`/workouts/${current.id}/exercises/${entry.id}/sets/${setId}`, { method: 'DELETE' });
+      if (result.exercise) replaceEntry(result.exercise);
+      else setWorkouts(old => old?.map(item => item.id === current.id ? { ...item, exercises: item.exercises.filter(e => e.id !== entry.id) } : item) || []);
+    });
+  }
+  async function leaveSuperset(entry: Exercise) {
+    if (!current) return;
+    await mutate(async () => {
+      const result = await api<{ supersets: Record<string, string | null> }>(`/workouts/${current.id}/exercises/${entry.id}/superset`, { method: 'PUT', body: JSON.stringify({ with: null }) });
+      setWorkouts(old => old?.map(item => item.id === current.id ? { ...item, exercises: item.exercises.map(e => ({ ...e, supersetId: result.supersets[e.id] ?? null })) } : item) || []);
     });
   }
   async function remove(id: string) {
@@ -115,10 +145,21 @@ export default function Lifts() {
     await mutate(async () => {
       await api(`/workouts/${current.id}/exercises/${id}`, { method: 'DELETE' });
       setWorkouts(old => old?.map(item => item.id === current.id ? { ...item, exercises: item.exercises.filter(entry => entry.id !== id) } : item) || []);
+      if (activeId === id) setActiveId(null);
     });
   }
+  // Tapping an exercise in the workout makes it the target for the next set, prefilled from its last set.
+  function activate(entry: Exercise) {
+    const item = catalog?.find(c => c.id === entry.exerciseId);
+    if (!item) { setError('This older exercise isn’t in the exercise list, so new sets can’t be added to it.'); return; }
+    const last = entry.sets[entry.sets.length - 1];
+    setChoice(item); setActiveId(entry.id); setSupersetNew(false); setError('');
+    if (last) { setWeight(String(last.weight)); setUnit(last.unit); setReps(String(last.reps)); }
+  }
+  // Show superset members together, in the order their group first appears.
+  const groups = groupSupersets(current?.exercises || []);
   function applyTarget(target: Target) {
-    setWeight(String(target.weight)); setUnit(target.unit); setReps(String(target.reps)); setSets(String(target.sets)); setError('');
+    setWeight(String(target.weight)); setUnit(target.unit); setReps(String(target.reps)); setError('');
   }
   function openPicker() { setQuery(''); setPicking(true); }
   return <SafeAreaView style={common.screen}><KeyboardAvoidingView style={common.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={common.content} keyboardShouldPersistTaps="handled">
@@ -147,12 +188,33 @@ export default function Lifts() {
     </View>}
     {current && <View style={common.card}>
       <View><Text style={common.label}>Current workout</Text><Text style={common.heading}>{current.name}</Text></View>
-      {current.exercises.map(entry => <View key={entry.id} style={common.listRow}><View style={common.item}><Text style={common.text}>{entry.exercise}</Text><Text style={common.secondary}>{setsSummary(entry.sets)}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${entry.exercise}`} disabled={busy} onPress={() => remove(entry.id)} style={common.textButton}><Text style={common.deleteText}>Delete</Text></Pressable></View>)}
+      {groups.map(group => <View key={group[0].id} style={group.length > 1 ? s.superset : undefined}>
+        {group.length > 1 && <Text style={[common.label, s.supersetLabel]}>Superset · alternate sets</Text>}
+        {group.map(entry => <View key={entry.id} style={[common.listRow, s.entry, entry.id === activeId && s.activeEntry]}>
+          <View style={common.item}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${entry.exercise}. Log the next set here`} accessibilityState={{ selected: entry.id === activeId }} disabled={busy} onPress={() => activate(entry)}>
+              <Text style={[common.text, entry.id === activeId && { color: colors.accent, fontWeight: '600' }]}>{entry.exercise}</Text>
+            </Pressable>
+            {entry.sets.map((set, index) => <View key={set.id} style={s.setRow}>
+              <Text style={[common.secondary, s.setNumber]}>{index + 1}</Text>
+              <Text style={[common.secondary, common.item]}>{set.reps} × {set.weight} {set.unit}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Delete set ${index + 1} of ${entry.exercise}`} disabled={busy} onPress={() => removeSet(entry, set.id)} style={s.setDelete}><Text style={common.deleteText}>✕</Text></Pressable>
+            </View>)}
+            {group.length > 1 && <Pressable accessibilityRole="button" disabled={busy} onPress={() => leaveSuperset(entry)}><Text style={common.label}>Remove from superset</Text></Pressable>}
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${entry.exercise}`} disabled={busy} onPress={() => remove(entry.id)} style={common.textButton}><Text style={common.deleteText}>Delete</Text></Pressable>
+        </View>)}
+      </View>)}
       <View style={common.field}><Text style={common.label}>Exercise</Text>
         <Pressable accessibilityRole="button" accessibilityLabel={choice ? `Exercise: ${choice.name}. Change exercise` : 'Choose exercise'} disabled={busy || !catalog} style={[common.input, s.picker, (busy || !catalog) && common.disabled]} onPress={openPicker}>
           <Text style={choice ? common.text : s.placeholder}>{choice ? choice.name : catalog ? 'Choose exercise' : 'Loading exercises…'}</Text><Text style={common.link}>›</Text>
         </Pressable>
       </View>
+      {/* Offered only when starting a different exercise while another is active in this workout. */}
+      {choice && !target && active && <Pressable accessibilityRole="switch" accessibilityState={{ checked: supersetNew }} disabled={busy} style={s.toggle} onPress={() => setSupersetNew(value => !value)}>
+        <View style={[s.box, supersetNew && s.boxOn]}>{supersetNew && <Text style={s.check}>✓</Text>}</View>
+        <Text style={common.text}>Superset with {active.exercise}</Text>
+      </Pressable>}
       {/* Progressive overload: last session, Repeat / +weight / +1 rep targets, and the trend, from
           the same shared component and endpoint the Profile tab uses. A chip only fills the form. */}
       {choice && <ExerciseProgress key={choice.id} exerciseId={choice.id} compact refreshKey={revision} onApply={applyTarget} onLoaded={suggestion => { if (suggestion && !weight.trim()) applyTarget(suggestion.same); }} />}
@@ -160,11 +222,8 @@ export default function Lifts() {
         <View style={common.listHeader}><Text style={common.label}>Weight</Text><View style={s.units}>{(['lb', 'kg'] as const).map(value => <Pressable accessibilityRole="button" accessibilityLabel={`Weight in ${value === 'lb' ? 'pounds' : 'kilograms'}`} accessibilityState={{ selected: unit === value }} disabled={busy} style={[s.unit, unit === value && s.selected]} key={value} onPress={() => setUnit(value)}><Text style={[s.unitText, unit === value && s.selectedText]}>{value}</Text></Pressable>)}</View></View>
         <TextInput accessibilityLabel={`Weight in ${unit}`} style={common.input} value={weight} onChangeText={setWeight} keyboardType="decimal-pad" placeholder="0 for bodyweight" placeholderTextColor={colors.placeholder} editable={!busy} keyboardAppearance={dark ? 'dark' : 'light'} />
       </View>
-      <View style={common.row}>
-        <View style={[common.field, s.numberField]}><Text style={common.label}>Sets</Text><TextInput accessibilityLabel="Sets" style={common.input} value={sets} onChangeText={setSets} keyboardType="number-pad" editable={!busy} keyboardAppearance={dark ? 'dark' : 'light'} /></View>
-        <View style={[common.field, s.numberField]}><Text style={common.label}>Reps per set</Text><TextInput accessibilityLabel="Reps" style={common.input} value={reps} onChangeText={setReps} keyboardType="number-pad" editable={!busy} keyboardAppearance={dark ? 'dark' : 'light'} /></View>
-      </View>
-      <Pressable accessibilityRole="button" disabled={busy} style={[common.button, busy && common.disabled]} onPress={save}><Text style={common.buttonText}>{busy ? 'Saving…' : 'Add exercise'}</Text></Pressable>
+      <View style={common.field}><Text style={common.label}>Reps</Text><TextInput accessibilityLabel="Reps" style={common.input} value={reps} onChangeText={setReps} keyboardType="number-pad" editable={!busy} keyboardAppearance={dark ? 'dark' : 'light'} /></View>
+      <Pressable accessibilityRole="button" disabled={busy || !choice} style={[common.button, (busy || !choice) && common.disabled]} onPress={logSet}><Text style={common.buttonText}>{busy ? 'Saving…' : choice ? `Log set ${nextSetNumber}${target ? '' : ` · ${choice.name}`}` : 'Choose an exercise'}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={`End workout ${current.name}`} disabled={busy} style={[common.textButton, s.end]} onPress={endWorkout}><Text style={common.deleteText}>End workout</Text></Pressable>
     </View>}
     <Modal visible={picking} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPicking(false)}>
@@ -174,7 +233,7 @@ export default function Lifts() {
           <TextInput accessibilityLabel="Search exercises" style={common.input} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.placeholder} autoCorrect={false} keyboardAppearance={dark ? 'dark' : 'light'} />
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.summary}>
             {matches.length === 0 && <Text style={common.empty}>No matching exercises.</Text>}
-            {matches.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: choice?.id === item.id }} style={common.listRow} onPress={() => { setChoice(item); setPicking(false); setError(''); }}>
+            {matches.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: choice?.id === item.id }} style={common.listRow} onPress={() => { setChoice(item); setPicking(false); setError(''); const existing = [...(current?.exercises || [])].reverse().find(entry => entry.exerciseId === item.id); if (existing) setActiveId(existing.id); }}>
               <View style={common.item}><Text style={common.text}>{item.name}</Text><Text style={common.secondary}>{item.category}</Text></View>{choice?.id === item.id && <Text style={common.link}>✓</Text>}
             </Pressable>)}
           </ScrollView>
@@ -198,7 +257,17 @@ export default function Lifts() {
 }
 
 const styles = (colors: Colors) => StyleSheet.create({
-  numberField: { flex: 1 },
+  superset: { borderLeftWidth: 3, borderColor: colors.accent, paddingLeft: 10, marginTop: 4 },
+  supersetLabel: { paddingTop: 8 },
+  entry: { alignItems: 'flex-start' },
+  activeEntry: { backgroundColor: colors.accentSurface, borderRadius: 10, paddingHorizontal: 8, paddingBottom: 8 },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 32 },
+  setNumber: { width: 18, textAlign: 'right' },
+  setDelete: { minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  box: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
+  boxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  check: { color: colors.buttonText, fontSize: 14, fontWeight: '700' },
   end: { alignSelf: 'center' },
   modalBackdrop: { flex: 1, backgroundColor: '#00000088', justifyContent: 'center', padding: 24 },
   modal: { maxHeight: '80%' },

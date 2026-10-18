@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { dateKey } from './api';
+import { lastDays, linePoints } from './workoutLogic';
 import useScopedApi from './useScopedApi';
 import DateNavigation from './DateNavigation';
 import { type Colors, useTheme } from './theme';
@@ -21,6 +22,7 @@ export default function WeightTracker() {
   const [weight, setWeight] = useState('');
   const [unit, setUnit] = useState<Unit>('lb');
   const [busy, setBusy] = useState(false);
+  const [width, setWidth] = useState(0);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const lock = useRef(false);
@@ -57,15 +59,21 @@ export default function WeightTracker() {
     } catch (e) { if (mounted.current) setError((e as Error).message); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
-  const days = Array.from({ length: 30 }, (_, index) => { const day = new Date(); day.setDate(day.getDate() - 29 + index); return dateKey(day); });
+  const days = lastDays(30);
   const byDate = new Map((entries || []).map(entry => [entry.date, entry]));
-  const visibleEntries = (entries || []).filter(entry => days.includes(entry.date));
-  const maximum = Math.max(10, Math.ceil(Math.max(...visibleEntries.map(entry => displayedWeight(entry, unit)), 1) / 10) * 10);
-  const points = days.map((day, index) => {
-    const entry = byDate.get(day);
-    const value = entry ? displayedWeight(entry, unit) : null;
-    return { day, value, x: index * 48 + 24, y: value === null ? null : 158 - value / maximum * 140 };
-  });
+  // Chart geometry. The chart fits the card (no horizontal scroll, which used to open on the
+  // oldest, usually empty, days). x is the day's position in the 30-day window, so gaps between
+  // logs keep their real width; logged days are joined in order so sparse logging still draws a
+  // line. y is scaled to the logged range (labeled below) because day-to-day changes are small
+  // next to body weight and a zero baseline made the line look flat.
+  const logged = days.map((day, index) => ({ day, index, entry: byDate.get(day) })).filter(item => item.entry);
+  const values = logged.map(item => displayedWeight(item.entry!, unit));
+  const chartHeight = 150, inset = 12;
+  const xFor = (index: number) => inset + index * (width - inset * 2) / (days.length - 1);
+  const line = linePoints(values, logged.map(item => item.index / (days.length - 1)), width, chartHeight, unit === 'kg' ? 0.5 : 1, inset);
+  const { min, max } = line;
+  const points = line.points.map((point, position) => ({ ...point, day: logged[position].day }));
+  const focus = points.find(point => point.day === key) || points[points.length - 1];
   return <View style={common.card}>
     <Text style={common.heading}>Weight</Text>
     <DateNavigation date={date} disabled={busy} onChange={next => { setDate(next); setWeight(''); setStatus(''); }} />
@@ -80,26 +88,28 @@ export default function WeightTracker() {
       <Text style={common.secondary}>Last 30 days · {unit}</Text>
       {!entries && !error && <Text style={common.secondary}>Loading…</Text>}
       {entries?.length === 0 && <Text style={common.secondary}>No weight logged.</Text>}
-      {!!entries?.length && <>
-        <Text style={common.label}>0–{Math.ceil(maximum)} {unit}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.chart} accessibilityLabel={`Daily weight line graph in ${unit}`}>
-          <View style={{ width: days.length * 48, height: 200 }}>
-            {/* Join adjacent measured days only; missing days break the line. */}
+      {!!entries?.length && !points.length && <Text style={common.secondary}>No weight logged in the last 30 days.</Text>}
+      {!!points.length && <>
+        <View style={{ height: chartHeight }} onLayout={event => setWidth(event.nativeEvent.layout.width)} accessibilityLabel={`Weight over the last 30 days in ${unit}, from ${points[0].value.toFixed(1)} to ${points[points.length - 1].value.toFixed(1)}`}>
+          {width > 0 && <>
+            <View pointerEvents="none" style={[s.gridLine, { top: 10 }]} />
+            <View pointerEvents="none" style={[s.gridLine, { top: chartHeight - 10 }]} />
+            {/* Today's position, so recent entries are easy to find. */}
+            <View pointerEvents="none" style={[s.today, { left: xFor(days.length - 1) }]} />
             {points.map((point, index) => {
               const previous = points[index - 1];
-              if (!previous || previous.y === null || point.y === null) return null;
-              const dx = point.x - previous.x, dy = point.y - previous.y;
-              const length = Math.hypot(dx, dy);
+              if (!previous) return null;
+              const dx = point.x - previous.x, dy = point.y - previous.y, length = Math.hypot(dx, dy);
               return <View key={`line-${point.day}`} pointerEvents="none" style={[s.segment, { left: (previous.x + point.x - length) / 2, top: (previous.y + point.y) / 2 - 1, width: length, transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }] }]} />;
             })}
-            <View pointerEvents="none" style={s.baseline} />
-            {points.map(point => <Pressable key={point.day} accessibilityRole="button" accessibilityLabel={point.value === null ? `${point.day}: No weight logged. Add entry.` : `${point.day}: ${point.value.toFixed(1)} ${unit}. Edit entry.`} accessibilityState={{ selected: point.day === key }} disabled={busy} style={[s.column, { left: point.x - 24 }]} onPress={() => { setDate(localDate(point.day)); setWeight(point.value === null ? '' : point.value.toFixed(1)); setStatus(''); }}>
-              {point.y !== null && <><Text style={[s.value, { top: point.y - 18 }]}>{point.value?.toFixed(1)}</Text><View style={[s.point, { top: point.y - 4, opacity: point.day === key ? 1 : 0.75 }]} /></>}
-              <Text style={s.date}>{point.day.slice(5).replace('-', '/')}</Text>
+            {/* 36 pt hit targets around 8 pt markers; tapping a point selects that day for editing. */}
+            {points.map(point => <Pressable key={point.day} accessibilityRole="button" accessibilityLabel={`${point.day}: ${point.value.toFixed(1)} ${unit}. Edit entry.`} accessibilityState={{ selected: point.day === focus?.day }} disabled={busy} style={[s.hit, { left: point.x - 18, top: point.y - 18 }]} onPress={() => { setDate(localDate(point.day)); setWeight(point.value.toFixed(1)); setStatus(''); }}>
+              <View style={[s.point, point.day === focus?.day && s.pointFocused]} />
             </Pressable>)}
-          </View>
-        </ScrollView>
-        <Text style={common.label}>Gaps are days without a log.</Text>
+          </>}
+        </View>
+        <View style={common.listHeader}><Text style={common.label}>{days[0].slice(5).replace('-', '/')}</Text><Text style={common.label}>{min.toFixed(1)}–{max.toFixed(1)} {unit}</Text><Text style={common.label}>Today</Text></View>
+        {focus && <Text style={common.secondary}>{focus.day}: {focus.value.toFixed(1)} {unit}{points.length > 1 ? ` · ${points[points.length - 1].value - points[0].value >= 0 ? '+' : ''}${(points[points.length - 1].value - points[0].value).toFixed(1)} ${unit} since ${points[0].day.slice(5).replace('-', '/')}` : ''}</Text>}
       </>}
     </View>
     {!!error && <View><Text accessibilityRole="alert" style={common.error}>{error}</Text>{!entries && <Pressable accessibilityRole="button" style={common.textButton} onPress={refresh}><Text style={common.link}>Retry</Text></Pressable>}</View>}
@@ -111,11 +121,10 @@ const styles = (colors: Colors) => StyleSheet.create({
   units: { flexDirection: 'row', backgroundColor: colors.background === '#000000' ? '#2c2c2e' : colors.background, borderRadius: 9, padding: 3, alignSelf: 'flex-end', marginBottom: 1 },
   unit: { minHeight: 40, minWidth: 42, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   selectedUnit: { backgroundColor: colors.accentSurface },
-  chart: { paddingTop: 4, paddingBottom: 4 },
-  column: { position: 'absolute', top: 0, width: 48, height: 200, alignItems: 'center' },
-  baseline: { position: 'absolute', top: 158, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
+  gridLine: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
+  today: { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   segment: { position: 'absolute', height: 2, backgroundColor: colors.accent },
-  point: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
-  value: { position: 'absolute', color: colors.text, fontSize: 11, fontWeight: '500' },
-  date: { position: 'absolute', top: 172, color: colors.secondary, fontSize: 11 },
+  hit: { position: 'absolute', width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  point: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
+  pointFocused: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.surface },
 });

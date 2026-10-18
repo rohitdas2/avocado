@@ -1,25 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect } from 'expo-router';
 import useScopedApi from '../../useScopedApi';
-import useForegroundRefresh from '../../useForegroundRefresh';
 import WeightTracker from '../../WeightTracker';
 import AvocadoIcon from '../../AvocadoIcon';
-import ExerciseProgress, { formatNumber, fromKg, type Unit } from '../../ExerciseProgress';
+import ProgressSheet from '../../ProgressSheet';
 import { useSession } from '../../session';
 import { type AppearancePreference, useTheme } from '../../theme';
 
-// Profile (formerly Settings), for registered users: who you are, how your lifts are trending,
-// bodyweight, then account controls. Exercise progress uses the same ExerciseProgress component
-// and endpoint as the Lifts screen; /api/progress only supplies the per-exercise overview rows.
-type Summary = { id: string; name: string; category: string; sessions: number; lastDate: string; bestE1rmKg: number; firstE1rmKg: number; latestE1rmKg: number; maxReps: number; unit: Unit };
-
-function trend(item: Summary) {
-  if (item.bestE1rmKg === 0) return { value: `${item.maxReps} reps`, change: '' };
-  const change = fromKg(item.latestE1rmKg - item.firstE1rmKg, item.unit);
-  return { value: `${formatNumber(fromKg(item.latestE1rmKg, item.unit))} ${item.unit}`, change: item.sessions > 1 ? `${change >= 0 ? '+' : ''}${formatNumber(change)} ${item.unit}` : '' };
-}
+// Profile (formerly Settings), for registered users: who you are, Progress (a page sheet listing
+// every logged exercise, then each one's max-weight graph), bodyweight, then account controls.
 
 export default function Profile() {
   const api = useScopedApi();
@@ -31,17 +22,8 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [progress, setProgress] = useState<Summary[] | null>(null);
-  const [progressError, setProgressError] = useState('');
-  const [openExercise, setOpenExercise] = useState<Summary | null>(null);
+  const [progressOpen, setProgressOpen] = useState(false);
   const lock = useRef(false);
-  const refreshProgress = useCallback(() => {
-    let active = true;
-    api<{ exercises: Summary[] }>('/progress').then(data => { if (active) { setProgress(data.exercises); setProgressError(''); } }).catch(e => { if (active) setProgressError(e.message); });
-    return () => { active = false; };
-  }, [api]);
-  useEffect(() => refreshProgress(), [refreshProgress]);
-  useForegroundRefresh(refreshProgress);
   async function perform(action: () => Promise<void>, message: string) {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(''); setStatus('');
@@ -53,17 +35,10 @@ export default function Profile() {
   return <SafeAreaView style={common.screen}><KeyboardAvoidingView style={common.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={common.content} keyboardShouldPersistTaps="handled">
     <View style={common.row}><AvocadoIcon size={40} /><View style={common.item}><Text style={common.title} numberOfLines={1}>{user.name}</Text><Text style={common.secondary}>{user.email}</Text></View></View>
 
-    <View style={common.card}>
-      <View style={common.listHeader}><Text style={common.heading}>Progress</Text><Text style={common.label}>Latest est. 1-rep max</Text></View>
-      {!progress && !progressError && <Text style={common.secondary}>Loading…</Text>}
-      {!!progressError && <Text accessibilityRole="alert" style={common.error}>{progressError}</Text>}
-      {progress?.length === 0 && <Text style={common.empty}>Log a lift to start tracking progress.</Text>}
-      {progress?.map(item => { const { value, change } = trend(item); return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`${item.name}: ${value}${change ? `, ${change} since first session` : ''}. View progress`} style={common.listRow} onPress={() => setOpenExercise(item)}>
-        <View style={common.item}><Text style={common.text}>{item.name}</Text><Text style={common.secondary}>{item.sessions} {item.sessions === 1 ? 'session' : 'sessions'} · last {item.lastDate}</Text></View>
-        <View style={{ alignItems: 'flex-end', gap: 2 }}><Text style={common.text}>{value}</Text>{!!change && <Text style={[common.label, { color: change.startsWith('+') && change !== `+0 ${item.unit}` ? colors.accent : colors.secondary }]}>{change}</Text>}</View>
-        <Text style={common.link}>›</Text>
-      </Pressable>; })}
-    </View>
+    <Pressable accessibilityRole="button" accessibilityLabel="Progress. See every exercise you've logged" style={[common.card, common.listHeader]} onPress={() => setProgressOpen(true)}>
+      <View style={common.item}><Text style={common.heading}>Progress</Text><Text style={common.secondary}>Every exercise you’ve logged, with a graph of each</Text></View>
+      <Text style={common.link}>›</Text>
+    </Pressable>
 
     <WeightTracker />
 
@@ -87,11 +62,6 @@ export default function Profile() {
     {busy && <Text style={common.secondary}>Saving…</Text>}
     <Pressable accessibilityRole="button" disabled={busy} style={[common.textButton, { alignItems: 'center' }]} onPress={() => void perform(signOut, '')}><Text style={common.deleteText}>Log out</Text></Pressable>
 
-    <Modal visible={!!openExercise} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpenExercise(null)}>
-      <SafeAreaView style={common.screen}><ScrollView contentContainerStyle={common.content}>
-        <View style={common.listHeader}><Text accessibilityRole="header" style={[common.title, common.item]} numberOfLines={2}>{openExercise?.name}</Text><Pressable accessibilityRole="button" style={common.textButton} onPress={() => setOpenExercise(null)}><Text style={common.link}>Done</Text></Pressable></View>
-        {openExercise && <View style={common.card}><ExerciseProgress exerciseId={openExercise.id} /></View>}
-      </ScrollView></SafeAreaView>
-    </Modal>
+    <ProgressSheet visible={progressOpen} onClose={() => setProgressOpen(false)} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView>;
 }

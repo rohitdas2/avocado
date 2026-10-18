@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
@@ -14,14 +15,21 @@ function TabIcon({ name, color }: { name: 'food' | 'lifts'; color: ColorValue })
 function Navigation() {
   const { colors, common, dark } = useTheme();
   const { loaded, available, restoreError, restore, user, guest } = useSession();
+  // Keep the opening screen up for at least 2 seconds on launch, even when the session restores
+  // faster; after that it only reappears while a session is genuinely being restored.
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setIntroDone(true), 2000); return () => clearTimeout(timer); }, []);
+  const opening = !introDone || !loaded;
   return <>
     <StatusBar style={dark ? 'light' : 'dark'} />
-    {!loaded || !available ? <SafeAreaView style={common.screen}><View style={[common.content, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}><Text style={common.title}>Avocado</Text><Text accessibilityRole={restoreError ? 'alert' : undefined} style={common.secondary}>{!loaded ? 'Opening your diary…' : restoreError}</Text>{loaded && <Pressable accessibilityRole="button" style={common.button} onPress={() => void restore()}><Text style={common.buttonText}>Try again</Text></Pressable>}</View></SafeAreaView> :
+    {opening || !available ? <SafeAreaView style={common.screen}><View style={[common.content, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>{/* Opening screen: the avocado and the name side by side, shown while the session is restored. */}<View accessible accessibilityRole="header" accessibilityLabel="Avocado" style={[common.row, { gap: 10 }]}><AvocadoIcon size={44} /><Text style={common.title}>Avocado</Text></View><Text accessibilityRole={restoreError ? 'alert' : undefined} style={[common.secondary, { textAlign: 'center' }]}>{opening ? 'Opening your diary…' : restoreError}</Text>{!opening && <Pressable accessibilityRole="button" style={common.button} onPress={() => void restore()}><Text style={common.buttonText}>Try again</Text></Pressable>}</View></SafeAreaView> :
       <Tabs key={user?.id || (guest ? 'guest' : 'account')} screenOptions={{ headerShown: false, tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.separator }, tabBarActiveTintColor: colors.accent, tabBarInactiveTintColor: colors.secondary, tabBarLabelStyle: { fontSize: 11, fontWeight: '500' } }}>
         <Tabs.Screen name="index" options={{ title: 'Food', tabBarIcon: ({ color }) => <TabIcon name="food" color={color} /> }} />
         <Tabs.Screen name="lifts" options={{ title: 'Lifts', tabBarIcon: ({ color }) => <TabIcon name="lifts" color={color} /> }} />
-        {/* Profile (formerly Settings) is just the avocado: no label, accessible name "Profile". */}
-        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarShowLabel: false, tabBarAccessibilityLabel: 'Profile', href: guest ? null : undefined, tabBarIcon: ({ focused }) => <AvocadoIcon size={28} active={focused} /> }} />
+        {/* Profile (formerly Settings) is just the avocado: no label, accessible name "Profile".
+            The label is blanked per tab with tabBarLabel. tabBarShowLabel is read from whichever tab
+            is focused and applies to the whole bar, so it hid Food and Lifts too while on Profile. */}
+        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarLabel: () => null, tabBarAccessibilityLabel: 'Profile', href: guest ? null : undefined, tabBarIcon: ({ focused }) => <AvocadoIcon size={28} active={focused} /> }} />
         <Tabs.Screen name="auth" options={{ href: null, tabBarStyle: { display: 'none' } }} />
       </Tabs>}
   </>;
