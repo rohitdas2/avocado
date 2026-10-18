@@ -315,3 +315,6 @@ dialog.sheet::backdrop { background: #00000080; }
   .food-columns > .card { width: 100%; }
   .portion-macros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.portion-chips { margin-bottom: 16px; }
+.portion-chips .chip { min-height: 44px; }
+.portion-total { margin: -10px 0 14px; }

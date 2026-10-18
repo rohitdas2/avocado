@@ -16,13 +16,13 @@ from .auth import (GUEST_COOKIE, SESSION_COOKIE, SESSION_SECONDS, account_respon
                    cookie_token, hash_password, new_token, public_account,
                    request_token, token_digest, verify_password)
 from .db import PostgresStore, connect
-from .nutrition import NutritionError, search_foods
+from .nutrition import NutritionError, food_portions, search_foods
 from .progress import suggest_next, summarize_sets
 from .validation import (valid_custom_food, valid_date, valid_email, valid_entry, valid_exercise, valid_set,
                          valid_id, valid_lift, valid_name, valid_password, valid_weight)
 
 
-def create_app(store=None, nutrition_search=search_foods, config=None):
+def create_app(store=None, nutrition_search=search_foods, config=None, nutrition_portions=food_portions):
     """Create the WSGI app; injected stores/search functions are used by tests.
 
     Browsers use separate HttpOnly account/guest cookies. Mobile sends the same
@@ -445,6 +445,17 @@ def create_app(store=None, nutrition_search=search_foods, config=None):
             return error("Search for an ingredient using 2–100 characters.", 400)
         try:
             return jsonify(foods=nutrition_search(query.strip()), source="USDA FoodData Central", basis="per 100 g")
+        except NutritionError as failure:
+            return error(str(failure), 502)
+
+    # Household measures for one USDA food ("1 large" banana = 136 g), read when a result is chosen
+    # rather than for every search result, so a search still costs one USDA request.
+    @app.get("/api/foods/<int:fdc_id>/portions")
+    def food_portions_route(fdc_id):
+        if not 1 <= fdc_id <= 2_147_483_647:
+            return error("Invalid food ID.", 400)
+        try:
+            return jsonify(portions=nutrition_portions(fdc_id), source="USDA FoodData Central")
         except NutritionError as failure:
             return error(str(failure), 502)
 

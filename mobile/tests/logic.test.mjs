@@ -2,7 +2,7 @@
 // Run: npm test   (Node's built-in runner with TypeScript type stripping; no extra dependencies)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dateKey, dayWindow, formatNumber, fromKg, groupSupersets, lastDays, linePoints, resolveTarget, setsSummary, toKg } from '../workoutLogic.ts';
+import { dateKey, dayWindow, formatNumber, fromKg, groupSupersets, lastDays, linePoints, portionServing, resolveTarget, setsSummary, toKg } from '../workoutLogic.ts';
 
 test('set summaries collapse equal sets and spell out mixed ones', () => {
   assert.equal(setsSummary([]), 'No sets');
@@ -87,4 +87,13 @@ test('the web client uses an identical copy of this logic', async () => {
   const here = new URL('../workoutLogic.ts', import.meta.url);
   const web = new URL('../../web/client/src/workoutLogic.ts', import.meta.url);
   assert.equal(await readFile(web, 'utf8'), await readFile(here, 'utf8'));
+});
+
+test('household portions scale to whole grams with a short label', () => {
+  const large = { label: '1 large (8" to 8-7/8" long)', grams: 136 };
+  assert.deepEqual(portionServing('1', large), { grams: 136, label: '1 large', unit: 'large' });
+  assert.deepEqual(portionServing('1.5', large), { grams: 204, label: '1.5 × large', unit: 'large' });
+  assert.deepEqual(portionServing('2', { label: '1 cup, sliced', grams: 150 }), { grams: 300, label: '2 × cup, sliced', unit: 'cup, sliced' });
+  for (const bad of ['', '0', '-1', 'abc', '101', '1e2', '.5']) assert.equal(portionServing(bad, large), null);
+  assert.equal(portionServing('0.001', { label: '1 tbsp', grams: 6.2 }), null);
 });

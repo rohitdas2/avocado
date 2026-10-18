@@ -6,7 +6,7 @@ import uuid
 from helpers import MemoryStore
 from server.app import create_app
 from server.auth import hash_password, token_digest, verify_password
-from server.nutrition import NutritionError, normalize_food
+from server.nutrition import NutritionError, normalize_food, normalize_portions
 from server.validation import valid_date, valid_entry, valid_lift
 
 PASSWORD = "Correct horse 123"
@@ -256,6 +256,33 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(broken.get("/api/foods/search?q=oats", headers=self.bearer(token)).status_code, 502)
         self.assertEqual(normalize_food({"fdcId": 1, "description": "Avocado", "foodNutrients": [{"nutrientId": 1003, "value": 0}, {"nutrientId": 1004, "value": 15.4}, {"nutrientId": 1062, "value": 700}, {"nutrientId": 2048, "value": 167}]}),
                          {"id": 1, "name": "Avocado", "protein": 0, "carbs": None, "fat": 15.4, "calories": 167})
+
+    def test_food_portions_route_and_normalization(self):
+        self.register()
+        token = self.api.post("/api/auth/login", json={"email": "rohit@example.com", "password": PASSWORD}).json["token"]
+        app = create_app(self.store, config={"TESTING": True}, nutrition_portions=lambda fdc_id: [{"label": "1 large", "grams": 136.0}] if fdc_id == 173944 else [])
+        client = app.test_client(use_cookies=False)
+        response = client.get("/api/foods/173944/portions", headers=self.bearer(token))
+        self.assertEqual((response.status_code, response.json["portions"]), (200, [{"label": "1 large", "grams": 136.0}]))
+        self.assertEqual(client.get("/api/foods/173944/portions").status_code, 401)
+        self.assertEqual(client.get("/api/foods/abc/portions", headers=self.bearer(token)).status_code, 404)
+        def unavailable(_fdc_id):
+            raise NutritionError("Serving sizes are unavailable.")
+        broken = create_app(self.store, config={"TESTING": True}, nutrition_portions=unavailable).test_client(use_cookies=False)
+        self.assertEqual(broken.get("/api/foods/1/portions", headers=self.bearer(token)).status_code, 502)
+        # USDA detail data (abridged from "Bananas, raw"): per-unit grams, smallest first, bad rows dropped.
+        portions = normalize_portions({"foodPortions": [
+            {"amount": 1.0, "modifier": "large (8\" to 8-7/8\" long)", "gramWeight": 136.0},
+            {"amount": 1.0, "modifier": "cup, sliced", "gramWeight": 150.0},
+            {"amount": 1.0, "modifier": "small (6\" to 6-7/8\" long)", "gramWeight": 101.0},
+            {"amount": 2.0, "modifier": "tbsp", "gramWeight": 12.4},
+            {"amount": 1.0, "modifier": "Large (8\" to 8-7/8\" long)", "gramWeight": 140.0},
+            {"amount": 1.0, "modifier": "broken", "gramWeight": 0},
+            {"amount": 1.0, "modifier": "", "measureUnit": {"name": "undetermined"}, "gramWeight": 5},
+        ]})
+        self.assertEqual(portions, [{"label": "2 tbsp", "grams": 6.2}, {"label": "1 small (6\" to 6-7/8\" long)", "grams": 101.0},
+                                    {"label": "1 large (8\" to 8-7/8\" long)", "grams": 136.0}, {"label": "1 cup, sliced", "grams": 150.0}])
+        self.assertEqual(normalize_portions({}), [])
 
     def test_calendar_and_numeric_validation(self):
         for date in ("2026-02-29", "2026-04-31", "bad", "0000-01-01", "2026-1-01", None):

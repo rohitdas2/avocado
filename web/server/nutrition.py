@@ -95,3 +95,40 @@ def search_foods(query):
         raise NutritionError("Nutrition search is unavailable. You can still add food manually.") from None
     except (TimeoutError, URLError, ValueError, KeyError, TypeError):
         raise NutritionError("Nutrition search is unavailable. You can still add food manually.") from None
+
+
+def normalize_portions(food):
+    """USDA household measures ("1 large (8\" to 8-7/8\" long)" = 136 g) for one food, smallest first.
+
+    Only positive, finite gram weights are kept; duplicate labels keep the first. Labels are
+    "<amount> <modifier>", e.g. "1 large (8\" to 8-7/8\" long)" or "1 cup, sliced".
+    """
+    portions, seen = [], set()
+    for item in food.get("foodPortions") or []:
+        grams, amount = item.get("gramWeight"), item.get("amount") or 1
+        if type(grams) not in (int, float) or not math.isfinite(grams) or grams <= 0 or type(amount) not in (int, float) or amount <= 0:
+            continue
+        unit = (item.get("measureUnit") or {}).get("name")
+        name = (item.get("modifier") or item.get("portionDescription") or (unit if unit and unit != "undetermined" else "") or "").strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        amount_text = f"{amount:g}"
+        # USDA gives the weight of `amount` units; store the weight of one so amounts scale simply.
+        portions.append({"label": f"{amount_text} {name}"[:120], "grams": round(grams / amount, 2)})
+    return sorted(portions, key=lambda portion: portion["grams"])[:20]
+
+
+def food_portions(fdc_id):
+    url = f"https://api.nal.usda.gov/fdc/v1/food/{int(fdc_id)}?" + urlencode({"api_key": os.getenv("USDA_API_KEY", "DEMO_KEY")})
+    try:
+        with urlopen(url, timeout=10) as response:
+            return normalize_portions(json.load(response))
+    except HTTPError as error:
+        if error.code == 429:
+            raise NutritionError("Nutrition search limit reached. Try later or configure a USDA API key.") from None
+        if error.code == 404:
+            return []
+        raise NutritionError("Serving sizes are unavailable. You can still enter grams.") from None
+    except (TimeoutError, URLError, ValueError, KeyError, TypeError):
+        raise NutritionError("Serving sizes are unavailable. You can still enter grams.") from None

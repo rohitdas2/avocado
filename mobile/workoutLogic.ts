@@ -72,3 +72,17 @@ export function linePoints(values: number[], positions: number[], width: number,
   }));
   return { points, min, max };
 }
+
+// A USDA household measure for one food ("1 large (8" to 8-7/8" long)" = 136 g per unit).
+export type Portion = { label: string; grams: number };
+// The serving an amount of a portion makes: whole grams (1–10,000, as the gram field allows) and a
+// short label for the diary entry ("1 large", "1.5 × large"); null when the amount is not 0–100.
+export function portionServing(amountText: string, portion: Portion) {
+  if (!/^\d+(\.\d+)?$/.test(amountText.trim())) return null;
+  const amount = Number(amountText);
+  if (!(amount > 0 && amount <= 100)) return null;
+  const grams = Math.round(amount * portion.grams);
+  if (grams < 1 || grams > 10000) return null;
+  const unit = portion.label.replace(/^\d+(\.\d+)?\s+/, '').replace(/\s*\(.*\)\s*$/, '');
+  return { grams, label: amount === 1 ? `1 ${unit}` : `${formatNumber(amount)} × ${unit}`, unit };
+}
