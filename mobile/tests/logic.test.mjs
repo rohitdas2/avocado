@@ -2,7 +2,7 @@
 // Run: npm test   (Node's built-in runner with TypeScript type stripping; no extra dependencies)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dateKey, formatNumber, fromKg, groupSupersets, lastDays, linePoints, resolveTarget, setsSummary, toKg } from '../workoutLogic.ts';
+import { dateKey, dayWindow, formatNumber, fromKg, groupSupersets, lastDays, linePoints, resolveTarget, setsSummary, toKg } from '../workoutLogic.ts';
 
 test('set summaries collapse equal sets and spell out mixed ones', () => {
   assert.equal(setsSummary([]), 'No sets');
@@ -10,6 +10,8 @@ test('set summaries collapse equal sets and spell out mixed ones', () => {
   assert.equal(setsSummary([{ reps: 8, weight: 135, unit: 'lb' }, { reps: 6, weight: 62.5, unit: 'kg' }]), '8 @ 135 lb, 6 @ 62.5 kg');
   assert.equal(formatNumber(2.25), '2.3');
   assert.equal(formatNumber(140), '140');
+  assert.equal(formatNumber(fromKg(toKg(145, 'lb'), 'lb')), '145');
+  assert.equal(formatNumber(-2.6000000001), '-2.6');
 });
 
 test('unit conversion round-trips', () => {
@@ -67,4 +69,22 @@ test('chart geometry handles empty, single, flat and rising data without NaN', (
   assert.ok(rising.min < 160 && rising.max > 170);
   assert.ok(linePoints([0, 1], [0, 1], 300, 150, 1).min >= 0, 'the scale never goes below zero');
   assert.ok(linePoints([1, 2], [0, 1], 0, 150, 1).points.every(point => Number.isFinite(point.x)), 'zero width before layout');
+});
+
+test('the daily chart window starts at the first log, showing at least a week', () => {
+  const twoDays = dayWindow([28, 29], 30);
+  assert.equal(twoDays.start, 23);                   // two recent logs: a 7-day window, not 30
+  assert.equal(twoDays.position(29), 1);
+  assert.ok(twoDays.position(28) < 1 && twoDays.position(28) > 0.8);
+  assert.equal(dayWindow([3, 20], 30).start, 3);     // older first log: the window starts there
+  assert.equal(dayWindow([], 30).start, 23);
+  assert.equal(dayWindow([0], 30).position(0), 0);
+});
+
+test('the web client uses an identical copy of this logic', async () => {
+  // web/client/src/workoutLogic.ts is a copy (the web build cannot reach this package); keep them equal.
+  const { readFile } = await import('node:fs/promises');
+  const here = new URL('../workoutLogic.ts', import.meta.url);
+  const web = new URL('../../web/client/src/workoutLogic.ts', import.meta.url);
+  assert.equal(await readFile(web, 'utf8'), await readFile(here, 'utf8'));
 });

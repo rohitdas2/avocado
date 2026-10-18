@@ -6,7 +6,18 @@ export type SetValue = { reps: number; weight: number; unit: Unit };
 export const KG_PER_LB = 0.45359237;
 export const fromKg = (kg: number, unit: Unit) => unit === 'kg' ? kg : kg / KG_PER_LB;
 export const toKg = (weight: number, unit: Unit) => unit === 'kg' ? weight : weight * KG_PER_LB;
-export const formatNumber = (value: number) => Number.isInteger(value) ? String(value) : value.toFixed(1);
+// One decimal at most. Rounds first, so a kg↔lb round trip (145.00000001) prints "145", not "145.0".
+export const formatNumber = (value: number) => { const rounded = Math.round(value * 10) / 10; return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1); };
+
+// The x-axis window for a daily chart: from the first logged day (or `minSpan` days back if that is
+// more recent) to the last day. Few logs then spread across the chart instead of sitting in the
+// last few pixels of a fixed 30-day axis. Returns each day's 0–1 position and the first day shown.
+export function dayWindow(loggedIndexes: number[], dayCount: number, minSpan = 6) {
+  const last = dayCount - 1;
+  const first = loggedIndexes.length ? Math.min(...loggedIndexes) : last - minSpan;
+  const start = Math.max(0, Math.min(first, last - minSpan));
+  return { start, position: (index: number) => (index - start) / (last - start) };
+}
 
 // "3 × 8 · 135 lb" when every set matches; otherwise each set, so pyramids and drop sets stay visible.
 export function setsSummary(sets: SetValue[]) {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { dateKey } from './api';
-import { lastDays, linePoints } from './workoutLogic';
+import { dayWindow, lastDays, linePoints } from './workoutLogic';
 import useScopedApi from './useScopedApi';
 import DateNavigation from './DateNavigation';
 import { type Colors, useTheme } from './theme';
@@ -69,8 +69,11 @@ export default function WeightTracker() {
   const logged = days.map((day, index) => ({ day, index, entry: byDate.get(day) })).filter(item => item.entry);
   const values = logged.map(item => displayedWeight(item.entry!, unit));
   const chartHeight = 150, inset = 12;
-  const xFor = (index: number) => inset + index * (width - inset * 2) / (days.length - 1);
-  const line = linePoints(values, logged.map(item => item.index / (days.length - 1)), width, chartHeight, unit === 'kg' ? 0.5 : 1, inset);
+  // The axis starts at the first log in the last 30 days (at least a week shown), so a short
+  // history spreads across the card instead of crowding the right edge.
+  const window = dayWindow(logged.map(item => item.index), days.length);
+  const xFor = (index: number) => inset + window.position(index) * (width - inset * 2);
+  const line = linePoints(values, logged.map(item => window.position(item.index)), width, chartHeight, unit === 'kg' ? 0.5 : 1, inset);
   const { min, max } = line;
   const points = line.points.map((point, position) => ({ ...point, day: logged[position].day }));
   const focus = points.find(point => point.day === key) || points[points.length - 1];
@@ -85,7 +88,7 @@ export default function WeightTracker() {
     {selected && <Pressable accessibilityRole="button" accessibilityLabel={`Delete weight for ${key}`} disabled={busy} style={common.textButton} onPress={() => void mutate(true)}><Text style={common.deleteText}>Delete this entry</Text></Pressable>}
     <View style={{ gap: 10, paddingTop: 8 }}>
       <Text style={common.heading}>Daily weight</Text>
-      <Text style={common.secondary}>Last 30 days · {unit}</Text>
+      <Text style={common.secondary}>Up to 30 days · {unit}</Text>
       {!entries && !error && <Text style={common.secondary}>Loading…</Text>}
       {entries?.length === 0 && <Text style={common.secondary}>No weight logged.</Text>}
       {!!entries?.length && !points.length && <Text style={common.secondary}>No weight logged in the last 30 days.</Text>}
@@ -108,7 +111,7 @@ export default function WeightTracker() {
             </Pressable>)}
           </>}
         </View>
-        <View style={common.listHeader}><Text style={common.label}>{days[0].slice(5).replace('-', '/')}</Text><Text style={common.label}>{min.toFixed(1)}–{max.toFixed(1)} {unit}</Text><Text style={common.label}>Today</Text></View>
+        <View style={common.listHeader}><Text style={common.label}>{days[window.start].slice(5).replace('-', '/')}</Text><Text style={common.label}>{min.toFixed(1)}–{max.toFixed(1)} {unit}</Text><Text style={common.label}>Today</Text></View>
         {focus && <Text style={common.secondary}>{focus.day}: {focus.value.toFixed(1)} {unit}{points.length > 1 ? ` · ${points[points.length - 1].value - points[0].value >= 0 ? '+' : ''}${(points[points.length - 1].value - points[0].value).toFixed(1)} ${unit} since ${points[0].day.slice(5).replace('-', '/')}` : ''}</Text>}
       </>}
     </View>
